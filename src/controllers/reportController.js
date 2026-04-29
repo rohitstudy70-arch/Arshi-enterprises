@@ -55,34 +55,114 @@ const isRecordToday = (recordDate, startOfDay, endOfDay) => {
   return d >= startOfDay.getTime() && d < endOfDay.getTime();
 };
 
+const isRecordYesterday = (recordDate, startOfDay) => {
+  const yesterdayStart = new Date(startOfDay);
+  yesterdayStart.setDate(yesterdayStart.getDate() - 1);
+  const yesterdayEnd = new Date(startOfDay);
+  const d = recordDate ? new Date(recordDate).getTime() : 0;
+  return d >= yesterdayStart.getTime() && d < yesterdayEnd.getTime();
+};
+
+const isRecordInPeriod = (recordDate, periodStart, periodEnd) => {
+  const d = recordDate ? new Date(recordDate).getTime() : 0;
+  return d >= periodStart.getTime() && d < periodEnd.getTime();
+};
+
+const getPeriodBoundaries = (days) => {
+  const now = new Date();
+  let currentEnd, currentStart, previousEnd, previousStart;
+
+  if (days === 1) {
+    // Daily: exact calendar today (midnight to midnight)
+    currentEnd = new Date(now);
+    currentEnd.setHours(0, 0, 0, 0);
+    currentEnd.setDate(currentEnd.getDate() + 1);
+    currentStart = new Date(currentEnd);
+    currentStart.setDate(currentStart.getDate() - 1);
+
+    previousEnd = new Date(currentStart);
+    previousStart = new Date(previousEnd);
+    previousStart.setDate(previousStart.getDate() - 1);
+  } else {
+    // Multi-day: aligned to midnight
+    currentEnd = new Date(now);
+    currentEnd.setHours(0, 0, 0, 0);
+    currentEnd.setDate(currentEnd.getDate() + 1);
+    currentStart = new Date(currentEnd);
+    currentStart.setDate(currentStart.getDate() - days);
+
+    previousEnd = new Date(currentStart);
+    previousStart = new Date(previousEnd);
+    previousStart.setDate(previousStart.getDate() - days);
+  }
+
+  return { currentStart, currentEnd, previousStart, previousEnd };
+};
+
+// ===== MONTH-TO-DATE & TILL-YESTERDAY HELPERS =====
+const getMonthToDateTotals = async (Model) => {
+  const now = new Date();
+  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+  monthStart.setHours(0, 0, 0, 0);
+
+  const records = await Model.find({ createdAt: { $gte: monthStart, $lte: now } });
+  const hasBill = records.length > 0 && records[0].billAmount !== undefined;
+
+  if (hasBill) {
+    const totalBill = records.reduce((s, r) => s + safeNum(r.billAmount), 0);
+    const totalReceived = records.reduce((s, r) => s + safeNum(r.receivedAmount), 0);
+    return { count: records.length, totalBill, totalReceived, totalDues: totalBill - totalReceived };
+  } else {
+    const totalAmount = records.reduce((s, r) => s + safeNum(r.amount), 0);
+    return { count: records.length, totalAmount };
+  }
+};
+
+const getTillYesterdayTotals = async (Model, periodStart) => {
+  const records = await Model.find({ createdAt: { $lt: periodStart } });
+  const hasBill = records.length > 0 && records[0].billAmount !== undefined;
+
+  if (hasBill) {
+    const totalBill = records.reduce((s, r) => s + safeNum(r.billAmount), 0);
+    const totalReceived = records.reduce((s, r) => s + safeNum(r.receivedAmount), 0);
+    return { count: records.length, totalBill, totalReceived, totalDues: totalBill - totalReceived };
+  } else {
+    const totalAmount = records.reduce((s, r) => s + safeNum(r.amount), 0);
+    return { count: records.length, totalAmount };
+  }
+};
+
 // ================= INCOME PERIOD REPORTS (PDF) =================
 const generateIncomePdfByPeriod = async (req, res, days, title) => {
   let browser;
   try {
-    const data = days === 1 ? await getTodayRecords(Income) : await getRecordsByPeriod(Income, days);
+    // Fetch 2x period so we can split into Current + Previous
+    const allData = await getRecordsByPeriod(Income, days * 2);
 
-    const totalBill = data.reduce((s, r) => s + safeNum(r.billAmount), 0);
-    const totalReceived = data.reduce((s, r) => s + safeNum(r.receivedAmount), 0);
+    // ---- PERIOD BOUNDARIES ----
+    const { currentStart, currentEnd, previousStart, previousEnd } = getPeriodBoundaries(days);
+
+    const currentData = allData.filter(r => isRecordInPeriod(r.createdAt, currentStart, currentEnd));
+    const previousData = allData.filter(r => isRecordInPeriod(r.createdAt, previousStart, previousEnd));
+
+    // Table shows only current period records
+    const tableData = currentData;
+
+    const totalBill = currentData.reduce((s, r) => s + safeNum(r.billAmount), 0) + previousData.reduce((s, r) => s + safeNum(r.billAmount), 0);
+    const totalReceived = currentData.reduce((s, r) => s + safeNum(r.receivedAmount), 0) + previousData.reduce((s, r) => s + safeNum(r.receivedAmount), 0);
     const totalDues = totalBill - totalReceived;
 
-    // ---- TODAY vs PREVIOUS BREAKDOWN ----
-    const now = new Date();
-    const startOfDay = new Date(now);
-    startOfDay.setHours(0, 0, 0, 0);
-    const endOfDay = new Date(startOfDay);
-    endOfDay.setDate(endOfDay.getDate() + 1);
-
-    const todayRevenue = data
-      .filter(r => isRecordToday(r.createdAt, startOfDay, endOfDay))
-      .reduce((s, r) => s + safeNum(r.billAmount), 0);
-    const todayReceived = data
-      .filter(r => isRecordToday(r.createdAt, startOfDay, endOfDay))
-      .reduce((s, r) => s + safeNum(r.receivedAmount), 0);
+    const todayRevenue = currentData.reduce((s, r) => s + safeNum(r.billAmount), 0);
+    const todayReceived = currentData.reduce((s, r) => s + safeNum(r.receivedAmount), 0);
     const todayDues = todayRevenue - todayReceived;
 
-    const prevRevenue = totalBill - todayRevenue;
-    const prevReceived = totalReceived - todayReceived;
+    const prevRevenue = previousData.reduce((s, r) => s + safeNum(r.billAmount), 0);
+    const prevReceived = previousData.reduce((s, r) => s + safeNum(r.receivedAmount), 0);
     const prevDues = prevRevenue - prevReceived;
+
+    // Fetch month-to-date and till-yesterday totals
+    const monthTotals = await getMonthToDateTotals(Income);
+    const tillYesterdayTotals = await getTillYesterdayTotals(Income, previousStart);
 
     console.log("[INCOME PDF] Today's Revenue:", todayRevenue);
     console.log("[INCOME PDF] Today's Received:", todayReceived);
@@ -93,8 +173,15 @@ const generateIncomePdfByPeriod = async (req, res, days, title) => {
     console.log("[INCOME PDF] Total Revenue:", totalBill);
     console.log("[INCOME PDF] Total Received:", totalReceived);
     console.log("[INCOME PDF] Total Dues:", totalDues);
+    console.log("[INCOME PDF] Month Revenue:", monthTotals.totalBill);
+    console.log("[INCOME PDF] Month Received:", monthTotals.totalReceived);
+    console.log("[INCOME PDF] Till Yesterday Revenue:", tillYesterdayTotals.totalBill);
+    console.log("[INCOME PDF] Till Yesterday Received:", tillYesterdayTotals.totalReceived);
 
-    const rows = data
+    const totalDuesTillDate = (tillYesterdayTotals.totalDues + todayDues) - prevReceived;
+    console.log("[INCOME PDF] Total Dues Till Date:", totalDuesTillDate);
+
+    const rows = tableData
       .map(
         (item, i) => `
         <tr>
@@ -152,18 +239,27 @@ const generateIncomePdfByPeriod = async (req, res, days, title) => {
         ${rows || '<tr><td colspan="13">No Data</td></tr>'}
       </table>
 
-      <div class="summary">
-        <p><b>Today's Revenue:</b> ${formatCurrency(todayRevenue)}</p>
-        <p><b>Today's Received:</b> ${formatCurrency(todayReceived)}</p>
-        <p><b>Today's Dues:</b> ${formatCurrency(todayDues)}</p>
-        <hr style="border:none; border-top:1px solid #ccc; margin:10px 0;" />
-        <p><b>Previous Revenue:</b> ${formatCurrency(prevRevenue)}</p>
-        <p><b>Previous Received:</b> ${formatCurrency(prevReceived)}</p>
-        <p><b>Previous Dues:</b> ${formatCurrency(prevDues)}</p>
-        <hr style="border:none; border-top:1px solid #ccc; margin:10px 0;" />
-        <p><b>Total Revenue:</b> ${formatCurrency(totalBill)}</p>
-        <p><b>Total Received:</b> ${formatCurrency(totalReceived)}</p>
-        <p><b>Total Dues:</b> ${formatCurrency(totalDues)}</p>
+      <div style="display: flex; justify-content: space-between; gap: 16px; margin: 20px 0;">
+        <div style="flex: 1; padding: 12px; background: #f9f9f9; border: 1px solid #ddd; border-radius: 4px;">
+          <h3 style="margin: 0 0 10px 0; font-size: 14px; color: #333; border-bottom: 1px solid #ccc; padding-bottom: 6px; text-align: center;">REVENUE</h3>
+          <p style="margin: 5px 0; font-size: 12px;"><b>Revenue Till Yesterday:</b> ${formatCurrency(tillYesterdayTotals.totalBill)}</p>
+          <p style="margin: 5px 0; font-size: 12px;"><b>Today's Revenue:</b> ${formatCurrency(todayRevenue)}</p>
+          <p style="margin: 5px 0; font-size: 12px;"><b>Total Revenue (Current Month):</b> ${formatCurrency(monthTotals.totalBill)}</p>
+        </div>
+        <div style="flex: 1; padding: 12px; background: #f9f9f9; border: 1px solid #ddd; border-radius: 4px;">
+          <h3 style="margin: 0 0 10px 0; font-size: 14px; color: #333; border-bottom: 1px solid #ccc; padding-bottom: 6px; text-align: center;">RECEIVED</h3>
+          <p style="margin: 5px 0; font-size: 12px;"><b>Total Received Till Yesterday:</b> ${formatCurrency(tillYesterdayTotals.totalReceived)}</p>
+          <p style="margin: 5px 0; font-size: 12px;"><b>Total Receive:</b> ${formatCurrency(todayReceived)}</p>
+          <p style="margin: 5px 0; font-size: 12px;"><b>Previous Due Amount Received(+):</b> ${formatCurrency(prevReceived)}</p>
+          <p style="margin: 5px 0; font-size: 12px;"><b>Total Received (Current Month):</b> ${formatCurrency(monthTotals.totalReceived)}</p>
+        </div>
+        <div style="flex: 1; padding: 12px; background: #f9f9f9; border: 1px solid #ddd; border-radius: 4px;">
+          <h3 style="margin: 0 0 10px 0; font-size: 14px; color: #333; border-bottom: 1px solid #ccc; padding-bottom: 6px; text-align: center;">DUES</h3>
+          <p style="margin: 5px 0; font-size: 12px;"><b>Total Due Till Yesterday:</b> ${formatCurrency(tillYesterdayTotals.totalDues)}</p>
+          <p style="margin: 5px 0; font-size: 12px;"><b>Today's Dues:</b> ${formatCurrency(todayDues)}</p>
+          <p style="margin: 5px 0; font-size: 12px;"><b>Previous Dues Amount Received(-):</b> ${formatCurrency(-prevReceived)}</p>
+          <p style="margin: 5px 0; font-size: 12px;"><b>Total Dues Till Date:</b> ${formatCurrency(totalDuesTillDate)}</p>
+        </div>
       </div>
 
     </body>
@@ -199,27 +295,32 @@ const generateIncomePdfByPeriod = async (req, res, days, title) => {
 const generateExpensePdfByPeriod = async (req, res, days, title) => {
   let browser;
   try {
-    const data = days === 1 ? await getTodayRecords(Expense) : await getRecordsByPeriod(Expense, days);
+    // Fetch 2x period so we can split into Current + Previous
+    const allData = await getRecordsByPeriod(Expense, days * 2);
 
-    const totalAmount = data.reduce((s, r) => s + safeNum(r.amount), 0);
+    // ---- PERIOD BOUNDARIES ----
+    const { currentStart, currentEnd, previousStart, previousEnd } = getPeriodBoundaries(days);
 
-    // ---- TODAY vs PREVIOUS BREAKDOWN ----
-    const now = new Date();
-    const startOfDay = new Date(now);
-    startOfDay.setHours(0, 0, 0, 0);
-    const endOfDay = new Date(startOfDay);
-    endOfDay.setDate(endOfDay.getDate() + 1);
+    const currentData = allData.filter(r => isRecordInPeriod(r.createdAt, currentStart, currentEnd));
+    const previousData = allData.filter(r => isRecordInPeriod(r.createdAt, previousStart, previousEnd));
 
-    const todayExpenses = data
-      .filter(r => isRecordToday(r.createdAt, startOfDay, endOfDay))
-      .reduce((s, r) => s + safeNum(r.amount), 0);
-    const prevExpenses = totalAmount - todayExpenses;
+    // Table shows only current period records
+    const tableData = currentData;
+
+    const todayExpenses = currentData.reduce((s, r) => s + safeNum(r.amount), 0);
+    const prevExpenses = previousData.reduce((s, r) => s + safeNum(r.amount), 0);
+    const totalAmount = todayExpenses + prevExpenses;
+
+    const monthTotals = await getMonthToDateTotals(Expense);
+    const tillYesterdayTotals = await getTillYesterdayTotals(Expense, previousStart);
 
     console.log("[EXPENSE PDF] Today's Expenses:", todayExpenses);
     console.log("[EXPENSE PDF] Previous Expenses:", prevExpenses);
     console.log("[EXPENSE PDF] Total Expenses:", totalAmount);
+    console.log("[EXPENSE PDF] Month Expenses:", monthTotals.totalAmount);
+    console.log("[EXPENSE PDF] Till Yesterday Expenses:", tillYesterdayTotals.totalAmount);
 
-    const rows = data
+    const rows = tableData
       .map(
         (item, i) => `
         <tr>
@@ -263,12 +364,22 @@ const generateExpensePdfByPeriod = async (req, res, days, title) => {
         ${rows || '<tr><td colspan="6">No Data</td></tr>'}
       </table>
 
-      <div class="summary">
-        <p><b>Today's Expenses:</b> ${formatCurrency(todayExpenses)}</p>
-        <hr style="border:none; border-top:1px solid #ccc; margin:10px 0;" />
-        <p><b>Previous Expenses:</b> ${formatCurrency(prevExpenses)}</p>
-        <hr style="border:none; border-top:1px solid #ccc; margin:10px 0;" />
-        <p><b>Total Expenses:</b> ${formatCurrency(totalAmount)}</p>
+      <div style="display: flex; justify-content: space-between; gap: 16px; margin: 20px 0;">
+        <div style="flex: 1; padding: 12px; background: #f9f9f9; border: 1px solid #ddd; border-radius: 4px;">
+          <h3 style="margin: 0 0 10px 0; font-size: 14px; color: #333; border-bottom: 1px solid #ccc; padding-bottom: 6px; text-align: center;">TILL YESTERDAY</h3>
+          <p style="margin: 5px 0; font-size: 12px;"><b>Total Records Till Yesterday:</b> ${tillYesterdayTotals.count}</p>
+          <p style="margin: 5px 0; font-size: 12px;"><b>Total Expenses Till Yesterday:</b> ${formatCurrency(tillYesterdayTotals.totalAmount)}</p>
+        </div>
+        <div style="flex: 1; padding: 12px; background: #f9f9f9; border: 1px solid #ddd; border-radius: 4px;">
+          <h3 style="margin: 0 0 10px 0; font-size: 14px; color: #333; border-bottom: 1px solid #ccc; padding-bottom: 6px; text-align: center;">CURRENT PERIOD</h3>
+          <p style="margin: 5px 0; font-size: 12px;"><b>Today's Expenses:</b> ${formatCurrency(todayExpenses)}</p>
+          <p style="margin: 5px 0; font-size: 12px;"><b>Previous Expenses:</b> ${formatCurrency(prevExpenses)}</p>
+          <p style="margin: 5px 0; font-size: 12px;"><b>Total Expenses (Current Month):</b> ${formatCurrency(monthTotals.totalAmount)}</p>
+        </div>
+        <div style="flex: 1; padding: 12px; background: #f9f9f9; border: 1px solid #ddd; border-radius: 4px;">
+          <h3 style="margin: 0 0 10px 0; font-size: 14px; color: #333; border-bottom: 1px solid #ccc; padding-bottom: 6px; text-align: center;">TOTAL</h3>
+          <p style="margin: 5px 0; font-size: 12px;"><b>Grand Total Expenses:</b> ${formatCurrency(totalAmount)}</p>
+        </div>
       </div>
 
     </body>
@@ -303,32 +414,31 @@ const generateExpensePdfByPeriod = async (req, res, days, title) => {
 // ================= EXCEL REPORT BY PERIOD =================
 const generateIncomeExcelByPeriod = async (req, res, days, filename) => {
   try {
-    const data = days === 1 ? await getTodayRecords(Income) : await getRecordsByPeriod(Income, days);
+    // Fetch 2x period so we can split into Current + Previous
+    const allData = await getRecordsByPeriod(Income, days * 2);
 
     const workbook = new ExcelJS.Workbook();
     const sheet = workbook.addWorksheet('Income');
 
-    const totalBill = data.reduce((s, r) => s + safeNum(r.billAmount), 0);
-    const totalReceived = data.reduce((s, r) => s + safeNum(r.receivedAmount), 0);
+    // ---- PERIOD BOUNDARIES ----
+    const { currentStart, currentEnd, previousStart, previousEnd } = getPeriodBoundaries(days);
+
+    const currentData = allData.filter(r => isRecordInPeriod(r.createdAt, currentStart, currentEnd));
+    const previousData = allData.filter(r => isRecordInPeriod(r.createdAt, previousStart, previousEnd));
+
+    // Table shows only current period records
+    const tableData = currentData;
+
+    const totalBill = currentData.reduce((s, r) => s + safeNum(r.billAmount), 0) + previousData.reduce((s, r) => s + safeNum(r.billAmount), 0);
+    const totalReceived = currentData.reduce((s, r) => s + safeNum(r.receivedAmount), 0) + previousData.reduce((s, r) => s + safeNum(r.receivedAmount), 0);
     const totalDues = totalBill - totalReceived;
 
-    // ---- TODAY vs PREVIOUS BREAKDOWN ----
-    const now = new Date();
-    const startOfDay = new Date(now);
-    startOfDay.setHours(0, 0, 0, 0);
-    const endOfDay = new Date(startOfDay);
-    endOfDay.setDate(endOfDay.getDate() + 1);
-
-    const todayRevenue = data
-      .filter(r => isRecordToday(r.createdAt, startOfDay, endOfDay))
-      .reduce((s, r) => s + safeNum(r.billAmount), 0);
-    const todayReceived = data
-      .filter(r => isRecordToday(r.createdAt, startOfDay, endOfDay))
-      .reduce((s, r) => s + safeNum(r.receivedAmount), 0);
+    const todayRevenue = currentData.reduce((s, r) => s + safeNum(r.billAmount), 0);
+    const todayReceived = currentData.reduce((s, r) => s + safeNum(r.receivedAmount), 0);
     const todayDues = todayRevenue - todayReceived;
 
-    const prevRevenue = totalBill - todayRevenue;
-    const prevReceived = totalReceived - todayReceived;
+    const prevRevenue = previousData.reduce((s, r) => s + safeNum(r.billAmount), 0);
+    const prevReceived = previousData.reduce((s, r) => s + safeNum(r.receivedAmount), 0);
     const prevDues = prevRevenue - prevReceived;
 
     console.log("[INCOME EXCEL] Today's Revenue:", todayRevenue);
@@ -340,6 +450,10 @@ const generateIncomeExcelByPeriod = async (req, res, days, filename) => {
     console.log("[INCOME EXCEL] Total Revenue:", totalBill);
     console.log("[INCOME EXCEL] Total Received:", totalReceived);
     console.log("[INCOME EXCEL] Total Dues:", totalDues);
+
+    const monthTotals = await getMonthToDateTotals(Income);
+    const tillYesterdayTotals = await getTillYesterdayTotals(Income, previousStart);
+    const totalDuesTillDate = (tillYesterdayTotals.totalDues + todayDues) - prevReceived;
 
     // set column widths (data columns + summary columns after Staff)
     sheet.getColumn('A').width = 6;
@@ -356,8 +470,14 @@ const generateIncomeExcelByPeriod = async (req, res, days, filename) => {
     sheet.getColumn('L').width = 20;
     sheet.getColumn('M').width = 15;
     sheet.getColumn('N').width = 3;   // blank spacer
-    sheet.getColumn('O').width = 18;
+    sheet.getColumn('O').width = 22;
     sheet.getColumn('P').width = 16;
+    sheet.getColumn('Q').width = 3;   // blank spacer
+    sheet.getColumn('R').width = 24;
+    sheet.getColumn('S').width = 16;
+    sheet.getColumn('T').width = 3;   // blank spacer
+    sheet.getColumn('U').width = 24;
+    sheet.getColumn('V').width = 16;
 
     // headers in row 1
     const headers = [
@@ -372,7 +492,7 @@ const generateIncomeExcelByPeriod = async (req, res, days, filename) => {
       cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF4F4F4' } };
     });
 
-    // ===== SUMMARY BLOCK (columns O-P, after Staff) =====
+    // ===== 3-COLUMN SUMMARY BLOCK =====
     const setSummaryCell = (cellRef, label, value, isHeader = false) => {
       const cell = sheet.getCell(cellRef);
       cell.value = label || value;
@@ -382,28 +502,38 @@ const generateIncomeExcelByPeriod = async (req, res, days, filename) => {
       }
     };
 
-    setSummaryCell('O1', 'TOTAL REVENUE', null, true);
-    setSummaryCell('P1', null, totalBill);
-    setSummaryCell('O2', 'TOTAL RECEIVED', null, true);
-    setSummaryCell('P2', null, totalReceived);
-    setSummaryCell('O3', 'TOTAL DUES', null, true);
-    setSummaryCell('P3', null, totalDues);
+    // -- REVENUE COLUMN (O-P) --
+    setSummaryCell('O1', 'REVENUE', null, true);
+    setSummaryCell('O2', 'Revenue Till Yesterday', null, true);
+    setSummaryCell('P2', null, tillYesterdayTotals.totalBill);
+    setSummaryCell('O3', "Today's Revenue", null, true);
+    setSummaryCell('P3', null, todayRevenue);
+    setSummaryCell('O4', 'Total Revenue (Current Month)', null, true);
+    setSummaryCell('P4', null, monthTotals.totalBill);
 
-    setSummaryCell('O5', "TODAY'S REVENUE", null, true);
-    setSummaryCell('P5', null, todayRevenue);
-    setSummaryCell('O6', "TODAY'S RECEIVED", null, true);
-    setSummaryCell('P6', null, todayReceived);
-    setSummaryCell('O7', "TODAY'S DUES", null, true);
-    setSummaryCell('P7', null, todayDues);
+    // -- RECEIVED COLUMN (R-S) --
+    setSummaryCell('R1', 'RECEIVED', null, true);
+    setSummaryCell('R2', 'Total Received Till Yesterday', null, true);
+    setSummaryCell('S2', null, tillYesterdayTotals.totalReceived);
+    setSummaryCell('R3', 'Total Receive', null, true);
+    setSummaryCell('S3', null, todayReceived);
+    setSummaryCell('R4', 'Previous Due Amount Received(+)', null, true);
+    setSummaryCell('S4', null, prevReceived);
+    setSummaryCell('R5', 'Total Received (Current Month)', null, true);
+    setSummaryCell('S5', null, monthTotals.totalReceived);
 
-    setSummaryCell('O9', 'PREVIOUS REVENUE', null, true);
-    setSummaryCell('P9', null, prevRevenue);
-    setSummaryCell('O10', 'PREVIOUS RECEIVED', null, true);
-    setSummaryCell('P10', null, prevReceived);
-    setSummaryCell('O11', 'PREVIOUS DUES', null, true);
-    setSummaryCell('P11', null, prevDues);
+    // -- DUES COLUMN (U-V) --
+    setSummaryCell('U1', 'DUES', null, true);
+    setSummaryCell('U2', 'Total Due Till Yesterday', null, true);
+    setSummaryCell('V2', null, tillYesterdayTotals.totalDues);
+    setSummaryCell('U3', "Today's Dues", null, true);
+    setSummaryCell('V3', null, todayDues);
+    setSummaryCell('U4', 'Previous Dues Amount Received(-)', null, true);
+    setSummaryCell('V4', null, -prevReceived);
+    setSummaryCell('U5', 'Total Dues Till Date', null, true);
+    setSummaryCell('V5', null, totalDuesTillDate);
 
-    data.forEach((item, i) => {
+    tableData.forEach((item, i) => {
       const rowNum = 2 + i;
       sheet.getCell(rowNum, 1).value = i + 1;
       sheet.getCell(rowNum, 2).value = formatDate(item.createdAt);
@@ -437,28 +567,31 @@ const generateIncomeExcelByPeriod = async (req, res, days, filename) => {
 
 const generateExpenseExcelByPeriod = async (req, res, days, filename) => {
   try {
-    const data = days === 1 ? await getTodayRecords(Expense) : await getRecordsByPeriod(Expense, days);
+    // Fetch 2x period so we can split into Current + Previous
+    const allData = await getRecordsByPeriod(Expense, days * 2);
 
     const workbook = new ExcelJS.Workbook();
     const sheet = workbook.addWorksheet('Expenses');
 
-    const totalAmount = data.reduce((s, r) => s + safeNum(r.amount), 0);
+    // ---- PERIOD BOUNDARIES ----
+    const { currentStart, currentEnd, previousStart, previousEnd } = getPeriodBoundaries(days);
 
-    // ---- TODAY vs PREVIOUS BREAKDOWN ----
-    const now = new Date();
-    const startOfDay = new Date(now);
-    startOfDay.setHours(0, 0, 0, 0);
-    const endOfDay = new Date(startOfDay);
-    endOfDay.setDate(endOfDay.getDate() + 1);
+    const currentData = allData.filter(r => isRecordInPeriod(r.createdAt, currentStart, currentEnd));
+    const previousData = allData.filter(r => isRecordInPeriod(r.createdAt, previousStart, previousEnd));
 
-    const todayExpenses = data
-      .filter(r => isRecordToday(r.createdAt, startOfDay, endOfDay))
-      .reduce((s, r) => s + safeNum(r.amount), 0);
-    const prevExpenses = totalAmount - todayExpenses;
+    // Table shows only current period records
+    const tableData = currentData;
+
+    const todayExpenses = currentData.reduce((s, r) => s + safeNum(r.amount), 0);
+    const prevExpenses = previousData.reduce((s, r) => s + safeNum(r.amount), 0);
+    const totalAmount = todayExpenses + prevExpenses;
 
     console.log("[EXPENSE EXCEL] Today's Expenses:", todayExpenses);
     console.log("[EXPENSE EXCEL] Previous Expenses:", prevExpenses);
     console.log("[EXPENSE EXCEL] Total Expenses:", totalAmount);
+
+    const monthTotals = await getMonthToDateTotals(Expense);
+    const tillYesterdayTotals = await getTillYesterdayTotals(Expense, previousStart);
 
     // set column widths (data columns + summary columns after Staff)
     sheet.getColumn('A').width = 6;
@@ -468,8 +601,14 @@ const generateExpenseExcelByPeriod = async (req, res, days, filename) => {
     sheet.getColumn('E').width = 30;
     sheet.getColumn('F').width = 15;
     sheet.getColumn('G').width = 3;   // blank spacer
-    sheet.getColumn('H').width = 18;
+    sheet.getColumn('H').width = 22;
     sheet.getColumn('I').width = 16;
+    sheet.getColumn('J').width = 3;   // blank spacer
+    sheet.getColumn('K').width = 22;
+    sheet.getColumn('L').width = 16;
+    sheet.getColumn('M').width = 3;   // blank spacer
+    sheet.getColumn('N').width = 22;
+    sheet.getColumn('O').width = 16;
 
     // headers in row 1
     const headers = ['S.No', 'Date', 'Category', 'Amount', 'Notes', 'Staff'];
@@ -480,7 +619,7 @@ const generateExpenseExcelByPeriod = async (req, res, days, filename) => {
       cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF4F4F4' } };
     });
 
-    // ===== SUMMARY BLOCK (columns H-I, after Staff) =====
+    // ===== 3-COLUMN SUMMARY BLOCK =====
     const setSummaryCell = (cellRef, label, value, isHeader = false) => {
       const cell = sheet.getCell(cellRef);
       cell.value = label || value;
@@ -490,16 +629,28 @@ const generateExpenseExcelByPeriod = async (req, res, days, filename) => {
       }
     };
 
-    setSummaryCell('H1', 'TOTAL EXPENSES', null, true);
-    setSummaryCell('I1', null, totalAmount);
+    // -- TILL YESTERDAY (H-I) --
+    setSummaryCell('H1', 'TILL YESTERDAY', null, true);
+    setSummaryCell('H2', 'Total Records Till Yesterday', null, true);
+    setSummaryCell('I2', null, tillYesterdayTotals.count);
+    setSummaryCell('H3', 'Total Expenses Till Yesterday', null, true);
+    setSummaryCell('I3', null, tillYesterdayTotals.totalAmount);
 
-    setSummaryCell('H3', "TODAY'S EXPENSES", null, true);
-    setSummaryCell('I3', null, todayExpenses);
+    // -- CURRENT PERIOD (K-L) --
+    setSummaryCell('K1', 'CURRENT PERIOD', null, true);
+    setSummaryCell('K2', "Today's Expenses", null, true);
+    setSummaryCell('L2', null, todayExpenses);
+    setSummaryCell('K3', 'Previous Expenses', null, true);
+    setSummaryCell('L3', null, prevExpenses);
+    setSummaryCell('K4', 'Total Expenses (Current Month)', null, true);
+    setSummaryCell('L4', null, monthTotals.totalAmount);
 
-    setSummaryCell('H5', 'PREVIOUS EXPENSES', null, true);
-    setSummaryCell('I5', null, prevExpenses);
+    // -- TOTAL (N-O) --
+    setSummaryCell('N1', 'TOTAL', null, true);
+    setSummaryCell('N2', 'Grand Total Expenses', null, true);
+    setSummaryCell('O2', null, totalAmount);
 
-    data.forEach((item, i) => {
+    tableData.forEach((item, i) => {
       const rowNum = 2 + i;
       sheet.getCell(rowNum, 1).value = i + 1;
       sheet.getCell(rowNum, 2).value = formatDate(item.createdAt);

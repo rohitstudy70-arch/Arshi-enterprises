@@ -27,7 +27,7 @@ const AdminPanelPage = () => {
   const [historyMonths, setHistoryMonths] = useState("12");
   const [filters, setFilters] = useState({
     userId: "",
-    days: "",
+    days: "1",
     startDate: "",
     endDate: ""
   });
@@ -205,14 +205,6 @@ const AdminPanelPage = () => {
 
     try {
       // INCOME REPORTS
-      if (type === "income-excel") {
-        await downloadIncomeExcelReport("monthly");
-        return;
-      }
-      if (type === "income-pdf") {
-        await downloadIncomePdfReport("monthly");
-        return;
-      }
       if (type === "income-daily-pdf") {
         await downloadIncomePdfReport("daily");
         return;
@@ -255,14 +247,6 @@ const AdminPanelPage = () => {
       }
 
       // EXPENSE REPORTS
-      if (type === "expense-excel") {
-        await downloadExpenseExcelReport("monthly");
-        return;
-      }
-      if (type === "expense-pdf") {
-        await downloadExpensePdfReport("monthly");
-        return;
-      }
       if (type === "expense-daily-pdf") {
         await downloadExpensePdfReport("daily");
         return;
@@ -669,24 +653,6 @@ const AdminPanelPage = () => {
             <p className="text-xs font-bold uppercase tracking-[0.22em] text-muted">Income Ledger</p>
             <h3 className="mt-2 text-2xl font-bold text-ink">All income records</h3>
           </div>
-          <div className="flex flex-col gap-3 sm:flex-row">
-            <button
-              type="button"
-              className="button-secondary w-full sm:w-auto"
-              onClick={() => handleExport("income-pdf")}
-              disabled={Boolean(exporting)}
-            >
-              {exporting === "income-pdf" ? "Exporting..." : "Export Income PDF"}
-            </button>
-            <button
-              type="button"
-              className="button-secondary w-full sm:w-auto"
-              onClick={() => handleExport("income-excel")}
-              disabled={Boolean(exporting)}
-            >
-              {exporting === "income-excel" ? "Exporting..." : "Export Income Excel"}
-            </button>
-          </div>
           {recordsLoading ? <p className="text-sm text-muted">Refreshing...</p> : null}
         </div>
         <div className="overflow-x-auto">
@@ -703,24 +669,6 @@ const AdminPanelPage = () => {
           <div>
             <p className="text-xs font-bold uppercase tracking-[0.22em] text-muted">Expense Ledger</p>
             <h3 className="mt-2 text-2xl font-bold text-ink">All expense records</h3>
-          </div>
-          <div className="flex flex-col gap-3 sm:flex-row">
-            <button
-              type="button"
-              className="button-secondary w-full sm:w-auto"
-              onClick={() => handleExport("expense-pdf")}
-              disabled={Boolean(exporting)}
-            >
-              {exporting === "expense-pdf" ? "Exporting..." : "Export Expense PDF"}
-            </button>
-            <button
-              type="button"
-              className="button-secondary w-full sm:w-auto"
-              onClick={() => handleExport("expense-excel")}
-              disabled={Boolean(exporting)}
-            >
-              {exporting === "expense-excel" ? "Exporting..." : "Export Expense Excel"}
-            </button>
           </div>
           {recordsLoading ? <p className="text-sm text-muted">Refreshing...</p> : null}
         </div>

@@ -12,10 +12,13 @@ const buildScopedFilter = (user, query = {}) => {
   }
 
   if (query.days && !isNaN(Number(query.days))) {
-    const d = new Date();
-    d.setDate(d.getDate() - Number(query.days));
-    d.setHours(0, 0, 0, 0);
-    filter.createdAt = { $gte: d };
+    const days = Number(query.days);
+    const now = new Date();
+    const start = new Date(now);
+    // days=1 -> today only; days=7 -> last 7 days including today
+    start.setDate(start.getDate() - days + 1);
+    start.setHours(0, 0, 0, 0);
+    filter.createdAt = { $gte: start, $lte: now };
   } else if (query.startDate || query.endDate) {
     filter.createdAt = {};
 
