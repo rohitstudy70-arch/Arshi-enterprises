@@ -1,0 +1,124 @@
+@import url("https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700&family=Space+Grotesk:wght@500;700&display=swap");
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --bg: #f0f2f5;
+  --bg-soft: #f8fafc;
+  --panel: #ffffff;
+  --ink: #0f172a;
+  --muted: #64748b;
+  --line: #e2e8f0;
+  --teal: #1e40af;
+  --amber: #d97706;
+}
+
+html {
+  scroll-behavior: smooth;
+  overflow-x: hidden;
+}
+
+body {
+  min-height: 100vh;
+  overflow-x: hidden;
+  background:
+    radial-gradient(circle at 10% 10%, rgba(30, 64, 175, 0.08), transparent 26%),
+    radial-gradient(circle at 90% 4%, rgba(217, 119, 6, 0.08), transparent 22%),
+    linear-gradient(180deg, #f8fafc 0%, #f1f5f9 100%);
+  color: var(--ink);
+  font-family: "DM Sans", sans-serif;
+}
+
+#root {
+  min-height: 100vh;
+}
+
+@layer base {
+
+  h1,
+  h2,
+  h3,
+  h4,
+  h5 {
+    font-family: "Space Grotesk", sans-serif;
+  }
+}
+
+@layer components {
+  .panel {
+    @apply rounded-3xl border border-line/90 bg-panel/95 shadow-float backdrop-blur sm:rounded-[28px];
+  }
+
+  .field {
+    @apply w-full min-w-0 rounded-2xl border border-line bg-white px-4 py-3 text-sm text-ink outline-none transition focus:border-teal focus:ring-4 focus:ring-teal/10;
+  }
+
+  .label {
+    @apply mb-2 block text-[11px] font-bold uppercase tracking-[0.2em] text-muted;
+  }
+
+  .button-primary {
+    @apply inline-flex min-h-11 items-center justify-center rounded-2xl bg-teal px-5 py-3 text-sm font-semibold text-white transition hover:bg-teal/90 focus:outline-none focus:ring-4 focus:ring-teal/20 disabled:cursor-not-allowed disabled:opacity-60;
+  }
+
+  .button-secondary {
+    @apply inline-flex min-h-11 items-center justify-center rounded-2xl border border-line bg-white px-5 py-3 text-sm font-semibold text-ink transition hover:bg-slate-50 focus:outline-none focus:ring-4 focus:ring-slate-200/70 disabled:cursor-not-allowed disabled:opacity-60;
+  }
+
+  .button-danger {
+    @apply inline-flex min-h-10 items-center justify-center rounded-2xl border border-red-200 bg-red-50 px-4 py-2 text-sm font-semibold text-red-700 transition hover:bg-red-100 focus:outline-none focus:ring-4 focus:ring-red-100 disabled:cursor-not-allowed disabled:opacity-60;
+  }
+
+  .table-wrap {
+    @apply overflow-hidden rounded-3xl border border-line bg-white sm:rounded-[28px];
+  }
+
+  .excel-table {
+    @apply min-w-full border-collapse text-left text-sm;
+  }
+
+  .excel-table thead th {
+    @apply sticky top-0 z-10 border-b border-r border-line bg-slate-100 px-4 py-3 text-[11px] font-bold uppercase tracking-[0.16em] text-muted;
+  }
+
+  .excel-table tbody td {
+    @apply border-b border-r border-line px-4 py-3 text-sm text-slate-700;
+  }
+
+  .excel-table thead th:last-child,
+  .excel-table tbody td:last-child {
+    @apply border-r-0;
+  }
+
+  .excel-table tbody tr:nth-child(even) {
+    @apply bg-slate-50/50;
+  }
+
+  .mobile-record-card {
+    @apply rounded-2xl border border-line bg-white p-4 shadow-sm;
+  }
+
+  .mobile-record-row {
+    @apply flex flex-col gap-1 border-b border-line/70 py-3 first:pt-0 last:border-b-0 last:pb-0;
+  }
+
+  .mobile-record-label {
+    @apply text-[10px] font-bold uppercase tracking-[0.18em] text-muted;
+  }
+
+  .mobile-record-value {
+    @apply min-w-0 break-words text-sm font-medium text-slate-800;
+  }
+
+  .mobile-record-value > div {
+    @apply flex flex-wrap gap-2;
+  }
+
+  .mobile-record-value .button-primary,
+  .mobile-record-value .button-secondary,
+  .mobile-record-value .button-danger {
+    @apply flex-1 px-3 py-2 text-xs;
+  }
+}
