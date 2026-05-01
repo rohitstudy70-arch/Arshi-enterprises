@@ -440,6 +440,7 @@ const ExecutivePanelPage = () => {
     { key: "model", header: "Model" },
     { key: "imeiLastSix", header: "IMEI Last 6" },
     { key: "technician", header: "Technician" },
+    { key: "reference", header: "Reference (Given By)" },
     { key: "billAmount", header: "Bill Amount", render: (row) => formatCurrency(row.billAmount) },
     { key: "receivedAmount", header: "Received Amount", render: (row) => formatCurrency(row.receivedAmount) },
     { key: "dues", header: "Dues", render: (row) => formatCurrency(row.dues) },
