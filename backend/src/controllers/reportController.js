@@ -261,6 +261,7 @@ const generateIncomeExcelByPeriod = async (req, res, days, filename) => {
     sheet.getColumn('Z').width = 16;  // Executive
     sheet.getColumn('AA').width = 28; // CCTV Details / Model
     sheet.getColumn('AB').width = 20; // Serial No
+    sheet.getColumn('AC').width = 22; // Reference (Given By)
 
     // Apply Indian-style currency number format to numeric money columns
     const moneyFormat = '#,##0.00';
@@ -268,18 +269,18 @@ const generateIncomeExcelByPeriod = async (req, res, days, filename) => {
       sheet.getColumn(c).numFmt = moneyFormat;
     });
     // Summary value columns
-    ['AE', 'AH', 'AK'].forEach((c) => {
+    ['AF', 'AI', 'AL'].forEach((c) => {
       sheet.getColumn(c).numFmt = moneyFormat;
     });
-    sheet.getColumn('AC').width = 3;  // blank spacer
-    sheet.getColumn('AD').width = 24; // Revenue label
-    sheet.getColumn('AE').width = 16; // Revenue value
-    sheet.getColumn('AF').width = 3;  // blank spacer
-    sheet.getColumn('AG').width = 24; // Received label
-    sheet.getColumn('AH').width = 16; // Received value
-    sheet.getColumn('AI').width = 3;  // blank spacer
-    sheet.getColumn('AJ').width = 24; // Dues label
-    sheet.getColumn('AK').width = 16; // Dues value
+    sheet.getColumn('AD').width = 3;  // blank spacer
+    sheet.getColumn('AE').width = 24; // Revenue label
+    sheet.getColumn('AF').width = 16; // Revenue value
+    sheet.getColumn('AG').width = 3;  // blank spacer
+    sheet.getColumn('AH').width = 24; // Received label
+    sheet.getColumn('AI').width = 16; // Received value
+    sheet.getColumn('AJ').width = 3;  // blank spacer
+    sheet.getColumn('AK').width = 24; // Dues label
+    sheet.getColumn('AL').width = 16; // Dues value
 
     // headers in row 1
     const headers = [
@@ -288,7 +289,7 @@ const generateIncomeExcelByPeriod = async (req, res, days, filename) => {
       'Model', 'IMEI Last 6', 'VTS No', 'Qty',
       'Bill Amount', 'Received Amount', 'Dues', 'Payment Mode',
       'Cash Amount', 'UPI Amount',
-      'UPI / UTR Ref', 'Bank Person', 'Cash Received By', 'Technician', 'Executive', 'CCTV Details / Model', 'Serial No'
+      'UPI / UTR Ref', 'Bank Person', 'Cash Received By', 'Technician', 'Executive', 'CCTV Details / Model', 'Serial No', 'Reference (Given By)'
     ];
     headers.forEach((h, idx) => {
       const cell = sheet.getCell(1, 1 + idx);
@@ -307,32 +308,32 @@ const generateIncomeExcelByPeriod = async (req, res, days, filename) => {
       }
     };
 
-    // -- REVENUE COLUMN (AD-AE) --
-    setSummaryCell('AD1', 'REVENUE', null, true);
-    setSummaryCell('AD2', 'Revenue Till Yesterday', null, true);
-    setSummaryCell('AE2', null, yesterdayRevenue);
-    setSummaryCell('AD3', "Today's Revenue", null, true);
-    setSummaryCell('AE3', null, todayRevenue);
-    setSummaryCell('AD4', 'Total Revenue (Current Day/Period)', null, true);
-    setSummaryCell('AE4', null, totalRevenue);
+    // -- REVENUE COLUMN (AE-AF) --
+    setSummaryCell('AE1', 'REVENUE', null, true);
+    setSummaryCell('AE2', 'Revenue Till Yesterday', null, true);
+    setSummaryCell('AF2', null, yesterdayRevenue);
+    setSummaryCell('AE3', "Today's Revenue", null, true);
+    setSummaryCell('AF3', null, todayRevenue);
+    setSummaryCell('AE4', 'Total Revenue (Current Day/Period)', null, true);
+    setSummaryCell('AF4', null, totalRevenue);
 
-    // -- RECEIVED COLUMN (AG-AH) --
-    setSummaryCell('AG1', 'RECEIVED', null, true);
-    setSummaryCell('AG2', 'Received Till Yesterday', null, true);
-    setSummaryCell('AH2', null, yesterdayReceived);
-    setSummaryCell('AG3', "Today's Received", null, true);
-    setSummaryCell('AH3', null, todayReceived);
-    setSummaryCell('AG4', days === 1 ? 'Total Received (Current Date)' : 'Total Received (Current Day/Period)', null, true);
-    setSummaryCell('AH4', null, totalReceived);
+    // -- RECEIVED COLUMN (AH-AI) --
+    setSummaryCell('AH1', 'RECEIVED', null, true);
+    setSummaryCell('AH2', 'Received Till Yesterday', null, true);
+    setSummaryCell('AI2', null, yesterdayReceived);
+    setSummaryCell('AH3', "Today's Received", null, true);
+    setSummaryCell('AI3', null, todayReceived);
+    setSummaryCell('AH4', days === 1 ? 'Total Received (Current Date)' : 'Total Received (Current Day/Period)', null, true);
+    setSummaryCell('AI4', null, totalReceived);
 
-    // -- DUES COLUMN (AJ-AK) --
-    setSummaryCell('AJ1', 'DUES', null, true);
-    setSummaryCell('AJ2', 'Dues Till Yesterday', null, true);
-    setSummaryCell('AK2', null, yesterdayDues);
-    setSummaryCell('AJ3', "Today's Dues", null, true);
-    setSummaryCell('AK3', null, todayDues);
-    setSummaryCell('AJ4', 'Total Dues (Current Day/Period)', null, true);
-    setSummaryCell('AK4', null, totalDues);
+    // -- DUES COLUMN (AK-AL) --
+    setSummaryCell('AK1', 'DUES', null, true);
+    setSummaryCell('AK2', 'Dues Till Yesterday', null, true);
+    setSummaryCell('AL2', null, yesterdayDues);
+    setSummaryCell('AK3', "Today's Dues", null, true);
+    setSummaryCell('AL3', null, todayDues);
+    setSummaryCell('AK4', 'Total Dues (Current Day/Period)', null, true);
+    setSummaryCell('AL4', null, totalDues);
 
     // Safe output helpers — never write undefined/null to Excel
     const safeStr = (val) => {
@@ -406,6 +407,7 @@ const generateIncomeExcelByPeriod = async (req, res, days, filename) => {
       sheet.getCell(rowNum, 26).value = staffName;
       sheet.getCell(rowNum, 27).value = safeStr(r.cctvDetails);
       sheet.getCell(rowNum, 28).value = safeStr(r.cctvSerialNo);
+      sheet.getCell(rowNum, 29).value = safeStrOrDash(r.reference);
     });
 
     // Debug: log first record's UPI fields to verify mapping

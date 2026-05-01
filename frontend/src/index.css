@@ -72,7 +72,21 @@ body {
   }
 
   .table-wrap {
-    @apply overflow-hidden rounded-3xl border border-line bg-white sm:rounded-[28px];
+    @apply overflow-auto rounded-3xl border border-line bg-white sm:rounded-[28px];
+    max-height: 70vh;
+  }
+
+  .table-wrap::-webkit-scrollbar {
+    @apply h-2.5 w-2.5;
+  }
+  .table-wrap::-webkit-scrollbar-track {
+    @apply rounded-full bg-slate-100;
+  }
+  .table-wrap::-webkit-scrollbar-thumb {
+    @apply rounded-full bg-slate-400;
+  }
+  .table-wrap::-webkit-scrollbar-thumb:hover {
+    @apply bg-slate-500;
   }
 
   .excel-table {
