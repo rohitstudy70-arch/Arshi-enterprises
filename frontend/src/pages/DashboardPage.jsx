@@ -112,6 +112,91 @@ const DashboardPage = () => {
         />
       </section>
 
+      <section className="panel p-6">
+        <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <p className="text-xs font-bold uppercase tracking-[0.22em] text-muted">Executive Activity</p>
+            <h3 className="mt-2 text-2xl font-bold text-ink">Collection & Expense by Executive</h3>
+            <p className="mt-1 text-sm text-muted">Har executive ne customer se kitna paisa collect kiya aur kitna expense kiya — aaj ka + is month ka.</p>
+          </div>
+          <p className="text-xs text-muted">{new Date().toLocaleDateString()}</p>
+        </div>
+
+        {Array.isArray(dashboard?.executiveBreakdown) && dashboard.executiveBreakdown.length > 0 ? (
+          <div className="mt-6 overflow-x-auto">
+            <table className="min-w-full text-left text-sm">
+              <thead>
+                <tr className="border-b border-line/80 text-xs font-semibold uppercase tracking-[0.14em] text-muted">
+                  <th rowSpan={2} className="px-3 py-2 align-bottom">Executive</th>
+                  <th colSpan={3} className="px-3 py-2 text-center border-l border-line/80 bg-teal/5">Today</th>
+                  <th colSpan={3} className="px-3 py-2 text-center border-l border-line/80 bg-slate-100">This Month</th>
+                </tr>
+                <tr className="border-b border-line/80 text-[11px] font-semibold uppercase tracking-[0.12em] text-muted">
+                  <th className="px-3 py-2 text-right border-l border-line/80 bg-teal/5">Collected</th>
+                  <th className="px-3 py-2 text-right bg-teal/5">Expense</th>
+                  <th className="px-3 py-2 text-right bg-teal/5">Net</th>
+                  <th className="px-3 py-2 text-right border-l border-line/80 bg-slate-100">Collected</th>
+                  <th className="px-3 py-2 text-right bg-slate-100">Expense</th>
+                  <th className="px-3 py-2 text-right bg-slate-100">Net</th>
+                </tr>
+              </thead>
+              <tbody>
+                {dashboard.executiveBreakdown.map((row) => (
+                  <tr key={row.userId} className="border-b border-line/60">
+                    <td className="px-3 py-3 font-semibold text-ink">{row.username}</td>
+                    <td className="px-3 py-3 text-right font-semibold text-teal border-l border-line/80">
+                      {formatCurrency(row.todayCollected)}
+                    </td>
+                    <td className="px-3 py-3 text-right font-semibold text-amber">{formatCurrency(row.todayExpense)}</td>
+                    <td className="px-3 py-3 text-right font-bold text-ink">
+                      {formatCurrency((row.todayCollected || 0) - (row.todayExpense || 0))}
+                    </td>
+                    <td className="px-3 py-3 text-right font-semibold text-teal border-l border-line/80">
+                      {formatCurrency(row.monthCollected)}
+                    </td>
+                    <td className="px-3 py-3 text-right font-semibold text-amber">{formatCurrency(row.monthExpense)}</td>
+                    <td className="px-3 py-3 text-right font-bold text-ink">
+                      {formatCurrency((row.monthCollected || 0) - (row.monthExpense || 0))}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+              <tfoot>
+                <tr className="bg-slate-50 text-sm font-bold text-ink">
+                  <td className="px-3 py-3">Total</td>
+                  <td className="px-3 py-3 text-right text-teal border-l border-line/80">
+                    {formatCurrency(dashboard.executiveBreakdown.reduce((s, r) => s + (r.todayCollected || 0), 0))}
+                  </td>
+                  <td className="px-3 py-3 text-right text-amber">
+                    {formatCurrency(dashboard.executiveBreakdown.reduce((s, r) => s + (r.todayExpense || 0), 0))}
+                  </td>
+                  <td className="px-3 py-3 text-right">
+                    {formatCurrency(
+                      dashboard.executiveBreakdown.reduce((s, r) => s + ((r.todayCollected || 0) - (r.todayExpense || 0)), 0)
+                    )}
+                  </td>
+                  <td className="px-3 py-3 text-right text-teal border-l border-line/80">
+                    {formatCurrency(dashboard.executiveBreakdown.reduce((s, r) => s + (r.monthCollected || 0), 0))}
+                  </td>
+                  <td className="px-3 py-3 text-right text-amber">
+                    {formatCurrency(dashboard.executiveBreakdown.reduce((s, r) => s + (r.monthExpense || 0), 0))}
+                  </td>
+                  <td className="px-3 py-3 text-right">
+                    {formatCurrency(
+                      dashboard.executiveBreakdown.reduce((s, r) => s + ((r.monthCollected || 0) - (r.monthExpense || 0)), 0)
+                    )}
+                  </td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+        ) : (
+          <p className="mt-6 rounded-2xl border border-dashed border-line/80 bg-slate-50 px-4 py-6 text-center text-sm text-muted">
+            Abhi koi executive activity record nahi hui.
+          </p>
+        )}
+      </section>
+
       <section className="grid gap-6 xl:grid-cols-[1.1fr_0.9fr]">
         <div className="panel p-6">
           <div className="flex items-end justify-between gap-4">

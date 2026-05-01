@@ -1,6 +1,7 @@
 const mongoose = require("mongoose");
 const Income = require("../models/Income");
 const Expense = require("../models/Expense");
+const User = require("../models/User");
 
 const getUserMatch = (user) => {
   if (user.role === "admin") {
@@ -106,19 +107,81 @@ const getDashboardData = async (req, res) => {
     const expenseMatch = getUserMatch(req.user);
     const { months } = buildMonthBuckets(summaryWindowMonths);
 
+    const todayMatchIncome = { ...incomeMatch, createdAt: { $gte: startOfDay, $lt: endOfDay } };
+    const todayMatchExpense = { ...expenseMatch, createdAt: { $gte: startOfDay, $lt: endOfDay } };
+
+    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+    monthStart.setHours(0, 0, 0, 0);
+    const nextMonthStart = new Date(monthStart);
+    nextMonthStart.setMonth(nextMonthStart.getMonth() + 1);
+
+    const monthMatchIncome = { ...incomeMatch, createdAt: { $gte: monthStart, $lt: nextMonthStart } };
+    const monthMatchExpense = { ...expenseMatch, createdAt: { $gte: monthStart, $lt: nextMonthStart } };
+
     const [
       todayRevenue,
       todayExpenses,
       totalDues,
       monthlyIncomeTotals,
-      monthlyExpenseTotals
+      monthlyExpenseTotals,
+      perExecutiveIncomeToday,
+      perExecutiveExpenseToday,
+      perExecutiveIncomeMonth,
+      perExecutiveExpenseMonth,
+      executives
     ] = await Promise.all([
-      getSingleTotal(Income, { ...incomeMatch, createdAt: { $gte: startOfDay, $lt: endOfDay } }, "receivedAmount"),
-      getSingleTotal(Expense, { ...expenseMatch, createdAt: { $gte: startOfDay, $lt: endOfDay } }, "amount"),
+      getSingleTotal(Income, todayMatchIncome, "receivedAmount"),
+      getSingleTotal(Expense, todayMatchExpense, "amount"),
       getSingleTotal(Income, incomeMatch, "dues"),
       getMonthlyTotals(Income, incomeMatch, "receivedAmount", timezone, summaryWindowMonths),
-      getMonthlyTotals(Expense, expenseMatch, "amount", timezone, summaryWindowMonths)
+      getMonthlyTotals(Expense, expenseMatch, "amount", timezone, summaryWindowMonths),
+      Income.aggregate([
+        { $match: todayMatchIncome },
+        { $group: { _id: "$userId", collected: { $sum: "$receivedAmount" }, billed: { $sum: "$billAmount" }, entries: { $sum: 1 } } }
+      ]),
+      Expense.aggregate([
+        { $match: todayMatchExpense },
+        { $group: { _id: "$userId", expense: { $sum: "$amount" }, entries: { $sum: 1 } } }
+      ]),
+      Income.aggregate([
+        { $match: monthMatchIncome },
+        { $group: { _id: "$userId", collected: { $sum: "$receivedAmount" }, billed: { $sum: "$billAmount" }, entries: { $sum: 1 } } }
+      ]),
+      Expense.aggregate([
+        { $match: monthMatchExpense },
+        { $group: { _id: "$userId", expense: { $sum: "$amount" }, entries: { $sum: 1 } } }
+      ]),
+      req.user.role === "admin"
+        ? User.find({ role: "executive" }).select("_id username").lean()
+        : User.find({ _id: req.user.id }).select("_id username").lean()
     ]);
+
+    // Build per-executive today + this-month breakdown
+    const incomeByUserToday = new Map(perExecutiveIncomeToday.map((r) => [String(r._id), r]));
+    const expenseByUserToday = new Map(perExecutiveExpenseToday.map((r) => [String(r._id), r]));
+    const incomeByUserMonth = new Map(perExecutiveIncomeMonth.map((r) => [String(r._id), r]));
+    const expenseByUserMonth = new Map(perExecutiveExpenseMonth.map((r) => [String(r._id), r]));
+
+    const executiveBreakdown = executives.map((u) => {
+      const incT = incomeByUserToday.get(String(u._id)) || {};
+      const expT = expenseByUserToday.get(String(u._id)) || {};
+      const incM = incomeByUserMonth.get(String(u._id)) || {};
+      const expM = expenseByUserMonth.get(String(u._id)) || {};
+      return {
+        userId: String(u._id),
+        username: u.username,
+        todayCollected: incT.collected || 0,
+        todayBilled: incT.billed || 0,
+        todayIncomeEntries: incT.entries || 0,
+        todayExpense: expT.expense || 0,
+        todayExpenseEntries: expT.entries || 0,
+        monthCollected: incM.collected || 0,
+        monthBilled: incM.billed || 0,
+        monthIncomeEntries: incM.entries || 0,
+        monthExpense: expM.expense || 0,
+        monthExpenseEntries: expM.entries || 0
+      };
+    }).sort((a, b) => b.monthCollected - a.monthCollected);
 
     const incomeMap = new Map(monthlyIncomeTotals.map((item) => [item._id, item.total]));
     const expenseMap = new Map(monthlyExpenseTotals.map((item) => [item._id, item.total]));
@@ -134,7 +197,8 @@ const getDashboardData = async (req, res) => {
       todayExpenses,
       totalDues,
       summaryWindowMonths,
-      monthlySummary
+      monthlySummary,
+      executiveBreakdown
     });
   } catch (error) {
     return res.status(500).json({ message: error.message });

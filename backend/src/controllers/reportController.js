@@ -216,7 +216,8 @@ const generateIncomeExcelByPeriod = async (req, res, days, filename) => {
     const todayReceived = todayOnlyData.reduce((s, r) => s + safeNum(r.receivedAmount), 0);
     const todayDues = todayRevenue - todayReceived;
 
-    // Daily report needs cumulative totals up to yesterday, not only yesterday's records.
+    // For daily report: till-yesterday is CUMULATIVE (all-time before today)
+    // For multi-day report: till-yesterday is within selected period, before today
     const yesterdayRevenue = tillYesterdayRevenue;
     const yesterdayReceived = tillYesterdayReceived;
     const yesterdayDues = tillYesterdayDues;
@@ -250,21 +251,35 @@ const generateIncomeExcelByPeriod = async (req, res, days, filename) => {
     sheet.getColumn('P').width = 8;
     sheet.getColumn('Q').width = 14;
     sheet.getColumn('R').width = 14;
-    sheet.getColumn('S').width = 12;
-    sheet.getColumn('T').width = 14;
-    sheet.getColumn('U').width = 14;
-    sheet.getColumn('V').width = 20;
-    sheet.getColumn('W').width = 16;
-    sheet.getColumn('X').width = 16;
-    sheet.getColumn('Y').width = 3;   // blank spacer
-    sheet.getColumn('Z').width = 22;
-    sheet.getColumn('AA').width = 16;
-    sheet.getColumn('AB').width = 3;  // blank spacer
-    sheet.getColumn('AC').width = 24;
-    sheet.getColumn('AD').width = 16;
-    sheet.getColumn('AE').width = 3;  // blank spacer
-    sheet.getColumn('AF').width = 24;
-    sheet.getColumn('AG').width = 16;
+    sheet.getColumn('S').width = 14;  // Payment Mode
+    sheet.getColumn('T').width = 14;  // Cash Amount
+    sheet.getColumn('U').width = 14;  // UPI Amount
+    sheet.getColumn('V').width = 20;  // UPI Ref
+    sheet.getColumn('W').width = 16;  // Bank Person
+    sheet.getColumn('X').width = 18;  // Cash Received By
+    sheet.getColumn('Y').width = 16;  // Technician
+    sheet.getColumn('Z').width = 16;  // Executive
+    sheet.getColumn('AA').width = 28; // CCTV Details / Model
+    sheet.getColumn('AB').width = 20; // Serial No
+
+    // Apply Indian-style currency number format to numeric money columns
+    const moneyFormat = '#,##0.00';
+    ['P', 'Q', 'R', 'T', 'U'].forEach((c) => {
+      sheet.getColumn(c).numFmt = moneyFormat;
+    });
+    // Summary value columns
+    ['AE', 'AH', 'AK'].forEach((c) => {
+      sheet.getColumn(c).numFmt = moneyFormat;
+    });
+    sheet.getColumn('AC').width = 3;  // blank spacer
+    sheet.getColumn('AD').width = 24; // Revenue label
+    sheet.getColumn('AE').width = 16; // Revenue value
+    sheet.getColumn('AF').width = 3;  // blank spacer
+    sheet.getColumn('AG').width = 24; // Received label
+    sheet.getColumn('AH').width = 16; // Received value
+    sheet.getColumn('AI').width = 3;  // blank spacer
+    sheet.getColumn('AJ').width = 24; // Dues label
+    sheet.getColumn('AK').width = 16; // Dues value
 
     // headers in row 1
     const headers = [
@@ -272,7 +287,8 @@ const generateIncomeExcelByPeriod = async (req, res, days, filename) => {
       'Address', 'District', 'Vehicle / Chassis', 'User ID', 'Item',
       'Model', 'IMEI Last 6', 'VTS No', 'Qty',
       'Bill Amount', 'Received Amount', 'Dues', 'Payment Mode',
-      'UPI / UTR Ref', 'Bank Person', 'Technician', 'Executive'
+      'Cash Amount', 'UPI Amount',
+      'UPI / UTR Ref', 'Bank Person', 'Cash Received By', 'Technician', 'Executive', 'CCTV Details / Model', 'Serial No'
     ];
     headers.forEach((h, idx) => {
       const cell = sheet.getCell(1, 1 + idx);
@@ -291,59 +307,121 @@ const generateIncomeExcelByPeriod = async (req, res, days, filename) => {
       }
     };
 
-    // -- REVENUE COLUMN (Z-AA) --
-    setSummaryCell('Z1', 'REVENUE', null, true);
-    setSummaryCell('Z2', 'Revenue Till Yesterday', null, true);
-    setSummaryCell('AA2', null, yesterdayRevenue);
-    setSummaryCell('Z3', "Today's Revenue", null, true);
-    setSummaryCell('AA3', null, todayRevenue);
-    setSummaryCell('Z4', 'Total Revenue (Current Day/Period)', null, true);
-    setSummaryCell('AA4', null, totalRevenue);
+    // -- REVENUE COLUMN (AD-AE) --
+    setSummaryCell('AD1', 'REVENUE', null, true);
+    setSummaryCell('AD2', 'Revenue Till Yesterday', null, true);
+    setSummaryCell('AE2', null, yesterdayRevenue);
+    setSummaryCell('AD3', "Today's Revenue", null, true);
+    setSummaryCell('AE3', null, todayRevenue);
+    setSummaryCell('AD4', 'Total Revenue (Current Day/Period)', null, true);
+    setSummaryCell('AE4', null, totalRevenue);
 
-    // -- RECEIVED COLUMN (AC-AD) --
-    setSummaryCell('AC1', 'RECEIVED', null, true);
-    setSummaryCell('AC2', 'Received Till Yesterday', null, true);
-    setSummaryCell('AD2', null, yesterdayReceived);
-    setSummaryCell('AC3', "Today's Received", null, true);
-    setSummaryCell('AD3', null, todayReceived);
-    setSummaryCell('AC4', days === 1 ? 'Total Received (Current Date)' : 'Total Received (Current Day/Period)', null, true);
-    setSummaryCell('AD4', null, totalReceived);
+    // -- RECEIVED COLUMN (AG-AH) --
+    setSummaryCell('AG1', 'RECEIVED', null, true);
+    setSummaryCell('AG2', 'Received Till Yesterday', null, true);
+    setSummaryCell('AH2', null, yesterdayReceived);
+    setSummaryCell('AG3', "Today's Received", null, true);
+    setSummaryCell('AH3', null, todayReceived);
+    setSummaryCell('AG4', days === 1 ? 'Total Received (Current Date)' : 'Total Received (Current Day/Period)', null, true);
+    setSummaryCell('AH4', null, totalReceived);
 
-    // -- DUES COLUMN (AF-AG) --
-    setSummaryCell('AF1', 'DUES', null, true);
-    setSummaryCell('AF2', 'Dues Till Yesterday', null, true);
-    setSummaryCell('AG2', null, yesterdayDues);
-    setSummaryCell('AF3', "Today's Dues", null, true);
-    setSummaryCell('AG3', null, todayDues);
-    setSummaryCell('AF4', 'Total Dues (Current Day/Period)', null, true);
-    setSummaryCell('AG4', null, totalDues);
+    // -- DUES COLUMN (AJ-AK) --
+    setSummaryCell('AJ1', 'DUES', null, true);
+    setSummaryCell('AJ2', 'Dues Till Yesterday', null, true);
+    setSummaryCell('AK2', null, yesterdayDues);
+    setSummaryCell('AJ3', "Today's Dues", null, true);
+    setSummaryCell('AK3', null, todayDues);
+    setSummaryCell('AJ4', 'Total Dues (Current Day/Period)', null, true);
+    setSummaryCell('AK4', null, totalDues);
+
+    // Safe output helpers — never write undefined/null to Excel
+    const safeStr = (val) => {
+      if (val === undefined || val === null) return '';
+      const s = String(val).trim();
+      return s.length === 0 ? '' : s;
+    };
+    const safeStrOrDash = (val) => {
+      const s = safeStr(val);
+      return s === '' ? '-' : s;
+    };
+    const safeNumber = (val) => {
+      const n = Number(val);
+      return Number.isFinite(n) ? n : 0;
+    };
 
     tableData.forEach((item, i) => {
       const rowNum = 2 + i;
+
+      // Convert Mongoose doc -> plain object so all paths resolve consistently
+      const r = typeof item.toObject === 'function' ? item.toObject() : item;
+
+      // Read UPI ref from current OR legacy field names for backward compatibility
+      const upiRef = safeStr(r.upiReferenceId || r.upiRefId || r.utrNumber || r.upiUtr);
+
+      const pm = safeStr(r.paymentMode);
+      const billAmt = safeNumber(r.billAmount);
+      const recvAmt = safeNumber(r.receivedAmount);
+      let cashAmt = safeNumber(r.cashAmount);
+      let upiAmt = safeNumber(r.upiAmount);
+
+      let pmLabel = pm;
+      if (pm === 'split') {
+        pmLabel = 'Split';
+      } else if (pm === 'cash') {
+        // Legacy records: cashAmount may be 0 even though full receipt was cash
+        if (cashAmt === 0 && recvAmt > 0) cashAmt = recvAmt;
+        upiAmt = 0;
+      } else if (pm === 'upi') {
+        if (upiAmt === 0 && recvAmt > 0) upiAmt = recvAmt;
+        cashAmt = 0;
+      }
+
+      const staffName = safeStr(r.userId?.username || r.userId?.name || r.staff);
+
       sheet.getCell(rowNum, 1).value = i + 1;
-      sheet.getCell(rowNum, 2).value = formatDate(item.createdAt);
-      sheet.getCell(rowNum, 3).value = item.cbNumber;
-      sheet.getCell(rowNum, 4).value = item.clientName;
-      sheet.getCell(rowNum, 5).value = item.mobile1 || '';
-      sheet.getCell(rowNum, 6).value = item.mobile2 || '';
-      sheet.getCell(rowNum, 7).value = item.address || '';
-      sheet.getCell(rowNum, 8).value = item.district || '';
-      sheet.getCell(rowNum, 9).value = item.vehicleChassisNo || '';
-      sheet.getCell(rowNum, 10).value = item.clientUserId || '';
-      sheet.getCell(rowNum, 11).value = item.item || '';
-      sheet.getCell(rowNum, 12).value = item.model || '';
-      sheet.getCell(rowNum, 13).value = item.imeiLastSix || '';
-      sheet.getCell(rowNum, 14).value = item.vtsNo || '';
-      sheet.getCell(rowNum, 15).value = item.quantity || 0;
-      sheet.getCell(rowNum, 16).value = item.billAmount;
-      sheet.getCell(rowNum, 17).value = item.receivedAmount;
-      sheet.getCell(rowNum, 18).value = item.dues;
-      sheet.getCell(rowNum, 19).value = item.paymentMode;
-      sheet.getCell(rowNum, 20).value = item.upiReferenceId || '-';
-      sheet.getCell(rowNum, 21).value = item.bankPersonName || '-';
-      sheet.getCell(rowNum, 22).value = item.technician || '';
-      sheet.getCell(rowNum, 23).value = item.userId?.username || '';
+      sheet.getCell(rowNum, 2).value = formatDate(r.createdAt);
+      sheet.getCell(rowNum, 3).value = safeStr(r.cbNumber);
+      sheet.getCell(rowNum, 4).value = safeStr(r.clientName);
+      sheet.getCell(rowNum, 5).value = safeStr(r.mobile1);
+      sheet.getCell(rowNum, 6).value = safeStr(r.mobile2);
+      sheet.getCell(rowNum, 7).value = safeStr(r.address);
+      sheet.getCell(rowNum, 8).value = safeStr(r.district);
+      sheet.getCell(rowNum, 9).value = safeStr(r.vehicleChassisNo);
+      sheet.getCell(rowNum, 10).value = safeStr(r.clientUserId);
+      sheet.getCell(rowNum, 11).value = safeStr(r.item || r.description);
+      sheet.getCell(rowNum, 12).value = safeStr(r.model);
+      sheet.getCell(rowNum, 13).value = safeStr(r.imeiLastSix);
+      sheet.getCell(rowNum, 14).value = safeStr(r.vtsNo);
+      sheet.getCell(rowNum, 15).value = safeNumber(r.quantity);
+      sheet.getCell(rowNum, 16).value = billAmt;
+      sheet.getCell(rowNum, 17).value = recvAmt;
+      sheet.getCell(rowNum, 18).value = safeNumber(r.dues);
+      sheet.getCell(rowNum, 19).value = pmLabel || '-';
+      sheet.getCell(rowNum, 20).value = cashAmt;
+      sheet.getCell(rowNum, 21).value = upiAmt;
+      sheet.getCell(rowNum, 22).value = upiRef === '' ? '-' : upiRef;
+      sheet.getCell(rowNum, 23).value = safeStrOrDash(r.bankPersonName);
+      sheet.getCell(rowNum, 24).value = safeStrOrDash(r.cashReceivedBy);
+      sheet.getCell(rowNum, 25).value = safeStr(r.technician);
+      sheet.getCell(rowNum, 26).value = staffName;
+      sheet.getCell(rowNum, 27).value = safeStr(r.cctvDetails);
+      sheet.getCell(rowNum, 28).value = safeStr(r.cctvSerialNo);
     });
+
+    // Debug: log first record's UPI fields to verify mapping
+    if (tableData.length > 0) {
+      const sample = typeof tableData[0].toObject === 'function' ? tableData[0].toObject() : tableData[0];
+      console.log('[INCOME EXCEL] Sample record UPI fields:', {
+        paymentMode: sample.paymentMode,
+        upiReferenceId: sample.upiReferenceId,
+        cashAmount: sample.cashAmount,
+        upiAmount: sample.upiAmount,
+        staff: sample.userId?.username
+      });
+    }
+
+    // Freeze header row for easier scrolling
+    sheet.views = [{ state: 'frozen', ySplit: 1 }];
 
     const buffer = await workbook.xlsx.writeBuffer();
 
@@ -406,6 +484,10 @@ const generateExpenseExcelByPeriod = async (req, res, days, filename) => {
     sheet.getColumn('N').width = 22;
     sheet.getColumn('O').width = 16;
 
+    // Currency format
+    const moneyFmt = '#,##0.00';
+    ['D', 'I', 'L', 'O'].forEach((c) => { sheet.getColumn(c).numFmt = moneyFmt; });
+
     // headers in row 1
     const headers = ['S.No', 'Date', 'Category', 'Amount', 'Notes', 'Executive'];
     headers.forEach((h, idx) => {
@@ -446,15 +528,32 @@ const generateExpenseExcelByPeriod = async (req, res, days, filename) => {
     setSummaryCell('N2', 'Grand Total Expenses', null, true);
     setSummaryCell('O2', null, totalAmount);
 
+    const categoryLabels = {
+      petrol: 'Petrol & Other Conveyance',
+      food: 'Food',
+      material: 'Material Purchase',
+      misc: 'Miscellaneous (Hotel & Other)'
+    };
+    const safeStrExp = (val) => {
+      if (val === undefined || val === null) return '';
+      const s = String(val).trim();
+      return s;
+    };
+
     tableData.forEach((item, i) => {
       const rowNum = 2 + i;
+      const r = typeof item.toObject === 'function' ? item.toObject() : item;
+      const cat = safeStrExp(r.category);
       sheet.getCell(rowNum, 1).value = i + 1;
-      sheet.getCell(rowNum, 2).value = formatDate(item.createdAt);
-      sheet.getCell(rowNum, 3).value = item.category;
-      sheet.getCell(rowNum, 4).value = item.amount;
-      sheet.getCell(rowNum, 5).value = item.notes || '';
-      sheet.getCell(rowNum, 6).value = item.userId?.username || '';
+      sheet.getCell(rowNum, 2).value = formatDate(r.createdAt);
+      sheet.getCell(rowNum, 3).value = categoryLabels[cat] || cat;
+      sheet.getCell(rowNum, 4).value = Number(r.amount) || 0;
+      sheet.getCell(rowNum, 5).value = safeStrExp(r.notes);
+      sheet.getCell(rowNum, 6).value = safeStrExp(r.userId?.username || r.userId?.name);
     });
+
+    // Freeze header row for easier scrolling
+    sheet.views = [{ state: 'frozen', ySplit: 1 }];
 
     const buffer = await workbook.xlsx.writeBuffer();
 

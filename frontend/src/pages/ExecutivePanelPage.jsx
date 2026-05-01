@@ -24,7 +24,12 @@ const initialIncomeForm = {
   receivedAmount: "",
   paymentMode: "cash",
   upiReferenceId: "",
-  bankPersonName: ""
+  bankPersonName: "",
+  cashReceivedBy: "",
+  cashAmount: "",
+  upiAmount: "",
+  cctvDetails: "",
+  cctvSerialNo: ""
 };
 
 const initialExpenseForm = {
@@ -105,11 +110,16 @@ const ExecutivePanelPage = () => {
 
     setIncomeForm((current) => {
       if (name === "paymentMode") {
+        const isUpiOrSplit = value === "upi" || value === "split";
+        const isCashOrSplit = value === "cash" || value === "split";
         return {
           ...current,
           paymentMode: value,
-          upiReferenceId: value === "upi" ? current.upiReferenceId : "",
-          bankPersonName: value === "upi" ? current.bankPersonName : ""
+          upiReferenceId: isUpiOrSplit ? current.upiReferenceId : "",
+          bankPersonName: isUpiOrSplit ? current.bankPersonName : "",
+          cashReceivedBy: isCashOrSplit ? current.cashReceivedBy : "",
+          cashAmount: value === "split" ? current.cashAmount : "",
+          upiAmount: value === "split" ? current.upiAmount : ""
         };
       }
 
@@ -130,12 +140,19 @@ const ExecutivePanelPage = () => {
   };
 
   const validateIncome = (form) => {
+    const isCctvMaterial = form.description === "CCTV Material";
+
     const requiredFields = [
       { key: "clientName", label: "Client Name / ID" },
       { key: "mobile1", label: "Mobile No 1" },
       { key: "description", label: "Description / Item" },
-      { key: "model", label: "Model" },
-      { key: "imeiLastSix", label: "IMEI Last 6 Digits" },
+      // Vehicle-specific fields skipped for CCTV Material
+      ...(isCctvMaterial
+        ? []
+        : [
+          { key: "model", label: "Model" },
+          { key: "imeiLastSix", label: "IMEI Last 6 Digits" }
+        ]),
       { key: "reference", label: "Reference" },
       { key: "quantity", label: "Quantity" },
       { key: "billAmount", label: "Bill Amount" },
@@ -147,12 +164,34 @@ const ExecutivePanelPage = () => {
       .filter((f) => String(form[f.key] ?? "").trim() === "")
       .map((f) => f.label);
 
-    if (form.paymentMode === "upi" && !String(form.upiReferenceId || "").trim()) {
+    if ((form.paymentMode === "upi" || form.paymentMode === "split") && !String(form.upiReferenceId || "").trim()) {
       missing.push("UPI Reference ID");
     }
 
-    if (form.paymentMode === "upi" && !String(form.bankPersonName || "").trim()) {
+    if ((form.paymentMode === "upi" || form.paymentMode === "split") && !String(form.bankPersonName || "").trim()) {
       missing.push("Bank Person");
+    }
+
+    if ((form.paymentMode === "cash" || form.paymentMode === "split") && !String(form.cashReceivedBy || "").trim()) {
+      missing.push("Cash Received By");
+    }
+
+    if (isCctvMaterial && !String(form.cctvDetails || "").trim()) {
+      missing.push("CCTV Details / Model");
+    }
+    if (isCctvMaterial && !String(form.cctvSerialNo || "").trim()) {
+      missing.push("Serial No");
+    }
+
+    if (form.paymentMode === "split") {
+      const cashAmt = Number(form.cashAmount || 0);
+      const upiAmt = Number(form.upiAmount || 0);
+      const recv = Number(form.receivedAmount || 0);
+      if (!(cashAmt > 0)) missing.push("Cash Amount");
+      if (!(upiAmt > 0)) missing.push("UPI Amount");
+      if (cashAmt > 0 && upiAmt > 0 && Math.abs((cashAmt + upiAmt) - recv) > 0.009) {
+        return `Cash (${cashAmt}) + UPI (${upiAmt}) must equal Received Amount (${recv}).`;
+      }
     }
 
     if (String(form.imeiLastSix || "").trim() && !/^[0-9]{6}$/.test(form.imeiLastSix)) {
@@ -199,7 +238,12 @@ const ExecutivePanelPage = () => {
         quantity: Number(incomeForm.quantity),
         billAmount: Number(incomeForm.billAmount),
         receivedAmount: Number(incomeForm.receivedAmount),
-        upiReferenceId: incomeForm.paymentMode === "upi" ? incomeForm.upiReferenceId : ""
+        upiReferenceId:
+          incomeForm.paymentMode === "upi" || incomeForm.paymentMode === "split"
+            ? incomeForm.upiReferenceId
+            : "",
+        cashAmount: incomeForm.paymentMode === "split" ? Number(incomeForm.cashAmount || 0) : 0,
+        upiAmount: incomeForm.paymentMode === "split" ? Number(incomeForm.upiAmount || 0) : 0
       });
       incomeOk = true;
       setIncomeForm(initialIncomeForm);
@@ -339,8 +383,13 @@ const ExecutivePanelPage = () => {
           billAmount: Number(data.billAmount),
           receivedAmount: Number(data.receivedAmount),
           paymentMode: data.paymentMode,
-          upiReferenceId: data.paymentMode === "upi" ? data.upiReferenceId : "",
-          bankPersonName: data.bankPersonName || ""
+          upiReferenceId: (data.paymentMode === "upi" || data.paymentMode === "split") ? data.upiReferenceId : "",
+          bankPersonName: data.bankPersonName || "",
+          cashReceivedBy: data.cashReceivedBy || "",
+          cashAmount: data.paymentMode === "split" ? Number(data.cashAmount || 0) : 0,
+          upiAmount: data.paymentMode === "split" ? Number(data.upiAmount || 0) : 0,
+          cctvDetails: data.description === "CCTV Material" ? (data.cctvDetails || "") : "",
+          cctvSerialNo: data.description === "CCTV Material" ? (data.cctvSerialNo || "") : ""
         });
       } else {
         await api.put(`/expenses/${data._id}`, {
@@ -386,6 +435,8 @@ const ExecutivePanelPage = () => {
     { key: "mobile1", header: "Mobile 1" },
     { key: "vehicleChassisNo", header: "Vehicle / Chassis" },
     { key: "description", header: "Description / Item" },
+    { key: "cctvDetails", header: "CCTV Details / Model" },
+    { key: "cctvSerialNo", header: "Serial No" },
     { key: "model", header: "Model" },
     { key: "imeiLastSix", header: "IMEI Last 6" },
     { key: "technician", header: "Technician" },
@@ -395,10 +446,17 @@ const ExecutivePanelPage = () => {
     {
       key: "paymentMode",
       header: "Payment Mode",
-      render: (row) => (row.paymentMode === "upi" ? "UPI" : "Cash")
+      render: (row) => {
+        if (row.paymentMode === "upi") return "UPI";
+        if (row.paymentMode === "split") {
+          return `Split (Cash ${formatCurrency(row.cashAmount)} + UPI ${formatCurrency(row.upiAmount)})`;
+        }
+        return "Cash";
+      }
     },
     { key: "upiReferenceId", header: "UPI Reference" },
     { key: "bankPersonName", header: "Bank Person" },
+    { key: "cashReceivedBy", header: "Cash Received By" },
     { key: "actions", header: "Actions", render: actionsCell("income") }
   ];
 
@@ -454,10 +512,12 @@ const ExecutivePanelPage = () => {
                 <label className="label">District</label>
                 <input className="field" name="district" value={incomeForm.district} onChange={handleIncomeChange} />
               </div>
-              <div>
-                <label className="label">Vehicle / Chassis No</label>
-                <input className="field" name="vehicleChassisNo" value={incomeForm.vehicleChassisNo} onChange={handleIncomeChange} />
-              </div>
+              {incomeForm.description !== "CCTV Material" ? (
+                <div>
+                  <label className="label">Vehicle / Chassis No</label>
+                  <input className="field" name="vehicleChassisNo" value={incomeForm.vehicleChassisNo} onChange={handleIncomeChange} />
+                </div>
+              ) : null}
               <div className="md:col-span-2">
                 <label className="label">Description / Item *</label>
                 <select className="field" name="description" value={incomeForm.description} onChange={handleIncomeChange} required>
@@ -465,34 +525,65 @@ const ExecutivePanelPage = () => {
                   <option value="GPS Installation">GPS Installation</option>
                   <option value="VLTD Installation">VLTD Installation</option>
                   <option value="GPS Renewal">GPS Renewal</option>
+                  <option value="VLTD Renewal">VLTD Renewal</option>
                   <option value="CCTV Installation">CCTV Installation</option>
+                  <option value="CCTV Material">CCTV Material</option>
                   <option value="Renewal with Service">Renewal with Service</option>
                   <option value="Replacement and Service">Replacement and Service</option>
                 </select>
               </div>
-              <div>
-                <label className="label">Model *</label>
-                <select className="field" name="model" value={incomeForm.model} onChange={handleIncomeChange} required>
-                  <option value="">Select...</option>
-                  <option value="A5">A5</option>
-                  <option value="PRO 4G">PRO 4G</option>
-                  <option value="AGPS">AGPS</option>
-                  <option value="AGT365N">AGT365N</option>
-                  <option value="ITR140">ITR140</option>
-                  <option value="ACTUTE140">ACTUTE140</option>
-                  <option value="MARK 140">MARK 140</option>
-                  <option value="RDM 140">RDM 140</option>
-                  <option value="ACCOLADE">ACCOLADE</option>
-                </select>
-              </div>
-              <div>
-                <label className="label">IMEI Last 6 Digits *</label>
-                <input className="field" name="imeiLastSix" value={incomeForm.imeiLastSix} onChange={handleIncomeChange} required minLength={6} maxLength={6} pattern="[0-9]{6}" title="Enter exactly 6 digits" />
-              </div>
-              <div>
-                <label className="label">VTS Last 6 Digits</label>
-                <input className="field" name="vtsNo" value={incomeForm.vtsNo} onChange={handleIncomeChange} />
-              </div>
+              {incomeForm.description === "CCTV Material" ? (
+                <>
+                  <div>
+                    <label className="label">CCTV Details / Model *</label>
+                    <input
+                      className="field"
+                      name="cctvDetails"
+                      value={incomeForm.cctvDetails}
+                      onChange={handleIncomeChange}
+                      placeholder="CCTV model / details"
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label className="label">Serial No *</label>
+                    <input
+                      className="field"
+                      name="cctvSerialNo"
+                      value={incomeForm.cctvSerialNo}
+                      onChange={handleIncomeChange}
+                      placeholder="Serial number"
+                      required
+                    />
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div>
+                    <label className="label">Model *</label>
+                    <select className="field" name="model" value={incomeForm.model} onChange={handleIncomeChange} required>
+                      <option value="">Select...</option>
+                      <option value="A5">A5</option>
+                      <option value="PRO 4G">PRO 4G</option>
+                      <option value="AGPS">AGPS</option>
+                      <option value="AGT365N">AGT365N</option>
+                      <option value="ITR140">ITR140</option>
+                      <option value="ACTUTE140">ACTUTE140</option>
+                      <option value="MARK 140">MARK 140</option>
+                      <option value="RDM 140">RDM 140</option>
+                      <option value="ACCOLADE">ACCOLADE</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="label">IMEI Last 6 Digits *</label>
+                    <input className="field" name="imeiLastSix" value={incomeForm.imeiLastSix} onChange={handleIncomeChange} required minLength={6} maxLength={6} pattern="[0-9]{6}" title="Enter exactly 6 digits" />
+                  </div>
+                  <div>
+                    <label className="label">VTS Last 6 Digits</label>
+                    <input className="field" name="vtsNo" value={incomeForm.vtsNo} onChange={handleIncomeChange} />
+                  </div>
+                </>
+              )}
               <div>
                 <label className="label">Technician</label>
                 <input className="field" name="technician" value={incomeForm.technician} onChange={handleIncomeChange} />
@@ -523,6 +614,7 @@ const ExecutivePanelPage = () => {
                 <select className="field" name="paymentMode" value={incomeForm.paymentMode} onChange={handleIncomeChange} required>
                   <option value="cash">Cash</option>
                   <option value="upi">UPI</option>
+                  <option value="split">Split (Cash + UPI)</option>
                 </select>
               </div>
               {incomeForm.paymentMode === "upi" ? (
@@ -547,6 +639,44 @@ const ExecutivePanelPage = () => {
                       placeholder="Bank person who received payment"
                       required
                     />
+                  </div>
+                </>
+              ) : null}
+              {incomeForm.paymentMode === "cash" ? (
+                <div>
+                  <label className="label">Cash Received By *</label>
+                  <input
+                    className="field"
+                    name="cashReceivedBy"
+                    value={incomeForm.cashReceivedBy}
+                    onChange={handleIncomeChange}
+                    placeholder="Name of person who received cash"
+                    required
+                  />
+                </div>
+              ) : null}
+              {incomeForm.paymentMode === "split" ? (
+                <>
+                  <div>
+                    <label className="label">Cash Amount *</label>
+                    <input className="field" type="number" min="0" step="0.01" name="cashAmount" value={incomeForm.cashAmount} onChange={handleIncomeChange} required />
+                  </div>
+                  <div>
+                    <label className="label">UPI Amount *</label>
+                    <input className="field" type="number" min="0" step="0.01" name="upiAmount" value={incomeForm.upiAmount} onChange={handleIncomeChange} required />
+                    <p className="mt-1 text-xs text-muted">Cash + UPI must equal Received Amount.</p>
+                  </div>
+                  <div>
+                    <label className="label">UPI Reference ID *</label>
+                    <input className="field" name="upiReferenceId" value={incomeForm.upiReferenceId} onChange={handleIncomeChange} required />
+                  </div>
+                  <div>
+                    <label className="label">Bank Person *</label>
+                    <input className="field" name="bankPersonName" value={incomeForm.bankPersonName} onChange={handleIncomeChange} placeholder="Bank person who received UPI payment" required />
+                  </div>
+                  <div>
+                    <label className="label">Cash Received By *</label>
+                    <input className="field" name="cashReceivedBy" value={incomeForm.cashReceivedBy} onChange={handleIncomeChange} placeholder="Name of person who received cash" required />
                   </div>
                 </>
               ) : null}
@@ -672,10 +802,12 @@ const ExecutivePanelPage = () => {
                     <label className="label">District</label>
                     <input className="field" name="district" value={editing.data.district || ""} onChange={handleEditChange} />
                   </div>
-                  <div>
-                    <label className="label">Vehicle / Chassis No</label>
-                    <input className="field" name="vehicleChassisNo" value={editing.data.vehicleChassisNo || ""} onChange={handleEditChange} />
-                  </div>
+                  {editing.data.description !== "CCTV Material" ? (
+                    <div>
+                      <label className="label">Vehicle / Chassis No</label>
+                      <input className="field" name="vehicleChassisNo" value={editing.data.vehicleChassisNo || ""} onChange={handleEditChange} />
+                    </div>
+                  ) : null}
                   <div className="md:col-span-2">
                     <label className="label">Description / Item *</label>
                     <select className="field" name="description" value={editing.data.description || ""} onChange={handleEditChange} required>
@@ -683,34 +815,65 @@ const ExecutivePanelPage = () => {
                       <option value="GPS Installation">GPS Installation</option>
                       <option value="VLTD Installation">VLTD Installation</option>
                       <option value="GPS Renewal">GPS Renewal</option>
+                      <option value="VLTD Renewal">VLTD Renewal</option>
                       <option value="CCTV Installation">CCTV Installation</option>
+                      <option value="CCTV Material">CCTV Material</option>
                       <option value="Renewal with Service">Renewal with Service</option>
                       <option value="Replacement and Service">Replacement and Service</option>
                     </select>
                   </div>
-                  <div>
-                    <label className="label">Model *</label>
-                    <select className="field" name="model" value={editing.data.model || ""} onChange={handleEditChange} required>
-                      <option value="">Select...</option>
-                      <option value="A5">A5</option>
-                      <option value="PRO 4G">PRO 4G</option>
-                      <option value="AGPS">AGPS</option>
-                      <option value="AGT365N">AGT365N</option>
-                      <option value="ITR140">ITR140</option>
-                      <option value="ACTUTE140">ACTUTE140</option>
-                      <option value="MARK 140">MARK 140</option>
-                      <option value="RDM 140">RDM 140</option>
-                      <option value="ACCOLADE">ACCOLADE</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label className="label">IMEI Last 6 Digits *</label>
-                    <input className="field" name="imeiLastSix" value={editing.data.imeiLastSix || ""} onChange={handleEditChange} required minLength={6} maxLength={6} pattern="[0-9]{6}" title="Enter exactly 6 digits" />
-                  </div>
-                  <div>
-                    <label className="label">VTS Last 6 Digits</label>
-                    <input className="field" name="vtsNo" value={editing.data.vtsNo || ""} onChange={handleEditChange} />
-                  </div>
+                  {editing.data.description === "CCTV Material" ? (
+                    <>
+                      <div>
+                        <label className="label">CCTV Details / Model *</label>
+                        <input
+                          className="field"
+                          name="cctvDetails"
+                          value={editing.data.cctvDetails || ""}
+                          onChange={handleEditChange}
+                          placeholder="CCTV model / details"
+                          required
+                        />
+                      </div>
+                      <div>
+                        <label className="label">Serial No *</label>
+                        <input
+                          className="field"
+                          name="cctvSerialNo"
+                          value={editing.data.cctvSerialNo || ""}
+                          onChange={handleEditChange}
+                          placeholder="Serial number"
+                          required
+                        />
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <div>
+                        <label className="label">Model *</label>
+                        <select className="field" name="model" value={editing.data.model || ""} onChange={handleEditChange} required>
+                          <option value="">Select...</option>
+                          <option value="A5">A5</option>
+                          <option value="PRO 4G">PRO 4G</option>
+                          <option value="AGPS">AGPS</option>
+                          <option value="AGT365N">AGT365N</option>
+                          <option value="ITR140">ITR140</option>
+                          <option value="ACTUTE140">ACTUTE140</option>
+                          <option value="MARK 140">MARK 140</option>
+                          <option value="RDM 140">RDM 140</option>
+                          <option value="ACCOLADE">ACCOLADE</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className="label">IMEI Last 6 Digits *</label>
+                        <input className="field" name="imeiLastSix" value={editing.data.imeiLastSix || ""} onChange={handleEditChange} required minLength={6} maxLength={6} pattern="[0-9]{6}" title="Enter exactly 6 digits" />
+                      </div>
+                      <div>
+                        <label className="label">VTS Last 6 Digits</label>
+                        <input className="field" name="vtsNo" value={editing.data.vtsNo || ""} onChange={handleEditChange} />
+                      </div>
+                    </>
+                  )}
                   <div>
                     <label className="label">Technician</label>
                     <input className="field" name="technician" value={editing.data.technician || ""} onChange={handleEditChange} />
@@ -736,6 +899,7 @@ const ExecutivePanelPage = () => {
                     <select className="field" name="paymentMode" value={editing.data.paymentMode || "cash"} onChange={handleEditChange} required>
                       <option value="cash">Cash</option>
                       <option value="upi">UPI</option>
+                      <option value="split">Split (Cash + UPI)</option>
                     </select>
                   </div>
                   {editing.data.paymentMode === "upi" ? (
@@ -747,6 +911,36 @@ const ExecutivePanelPage = () => {
                       <div>
                         <label className="label">Bank Person *</label>
                         <input className="field" name="bankPersonName" value={editing.data.bankPersonName || ""} onChange={handleEditChange} placeholder="Bank person who received payment" required />
+                      </div>
+                    </>
+                  ) : null}
+                  {editing.data.paymentMode === "cash" ? (
+                    <div>
+                      <label className="label">Cash Received By *</label>
+                      <input className="field" name="cashReceivedBy" value={editing.data.cashReceivedBy || ""} onChange={handleEditChange} placeholder="Name of person who received cash" required />
+                    </div>
+                  ) : null}
+                  {editing.data.paymentMode === "split" ? (
+                    <>
+                      <div>
+                        <label className="label">Cash Amount *</label>
+                        <input className="field" type="number" min="0" step="0.01" name="cashAmount" value={editing.data.cashAmount ?? ""} onChange={handleEditChange} required />
+                      </div>
+                      <div>
+                        <label className="label">UPI Amount *</label>
+                        <input className="field" type="number" min="0" step="0.01" name="upiAmount" value={editing.data.upiAmount ?? ""} onChange={handleEditChange} required />
+                      </div>
+                      <div>
+                        <label className="label">UPI Reference ID *</label>
+                        <input className="field" name="upiReferenceId" value={editing.data.upiReferenceId || ""} onChange={handleEditChange} required />
+                      </div>
+                      <div>
+                        <label className="label">Bank Person *</label>
+                        <input className="field" name="bankPersonName" value={editing.data.bankPersonName || ""} onChange={handleEditChange} required />
+                      </div>
+                      <div>
+                        <label className="label">Cash Received By *</label>
+                        <input className="field" name="cashReceivedBy" value={editing.data.cashReceivedBy || ""} onChange={handleEditChange} required />
                       </div>
                     </>
                   ) : null}

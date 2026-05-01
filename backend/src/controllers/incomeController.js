@@ -43,7 +43,12 @@ const addIncome = async (req, res) => {
       receivedAmount,
       paymentMode,
       upiReferenceId,
-      bankPersonName
+      bankPersonName,
+      cashReceivedBy,
+      cashAmount,
+      upiAmount,
+      cctvDetails,
+      cctvSerialNo
     } = req.body;
 
     const cdbNumber = await getNextCdbNumber();
@@ -71,7 +76,12 @@ const addIncome = async (req, res) => {
       receivedAmount,
       paymentMode,
       upiReferenceId,
-      bankPersonName
+      bankPersonName,
+      cashReceivedBy,
+      cashAmount,
+      upiAmount,
+      cctvDetails,
+      cctvSerialNo
     });
 
     return res.status(201).json({ income });
@@ -121,7 +131,12 @@ const updateIncome = async (req, res) => {
       "receivedAmount",
       "paymentMode",
       "upiReferenceId",
-      "bankPersonName"
+      "bankPersonName",
+      "cashReceivedBy",
+      "cashAmount",
+      "upiAmount",
+      "cctvDetails",
+      "cctvSerialNo"
     ];
 
     const updates = Object.fromEntries(
