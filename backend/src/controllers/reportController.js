@@ -1,6 +1,7 @@
 const ExcelJS = require('exceljs');
 const Income = require('../models/Income');
 const Expense = require('../models/Expense');
+const Item = require('../models/Item');
 
 const REPORT_TIMEZONE_OFFSET_MINUTES = 330; // IST / Asia-Kolkata
 
@@ -177,7 +178,192 @@ const getIncomeTotalsInRange = async (startDate, endDate, userId = null) => {
 // ================= EXCEL REPORT BY PERIOD =================
 const generateIncomeExcelByPeriod = async (req, res, days, filename) => {
   try {
-    const userId = req.query.userId || null;
+    {
+      const userId = req.query.userId || null;
+      const filter = {};
+      if (userId) filter.userId = userId;
+
+      const { currentStart, currentEnd } = getPeriodBoundaries(days);
+      if (days < 999999) {
+        filter.$or = [
+          { transaction_date: { $gte: currentStart, $lt: currentEnd } },
+          { transaction_date: { $exists: false }, createdAt: { $gte: currentStart, $lt: currentEnd } }
+        ];
+      }
+      if (req.query.month && /^\d{4}-\d{2}$/.test(String(req.query.month))) {
+        const [year, month] = String(req.query.month).split("-").map(Number);
+        const start = new Date(year, month - 1, 1);
+        const end = new Date(year, month, 1);
+        filter.$or = [
+          { transaction_date: { $gte: start, $lt: end } },
+          { transaction_date: { $exists: false }, createdAt: { $gte: start, $lt: end } }
+        ];
+      }
+      if (req.query.serviceType) {
+        filter.$and = filter.$and || [];
+        filter.$and.push({
+          $or: [
+            { serviceType: req.query.serviceType },
+            { serviceType: { $in: [null, ""] }, description: req.query.serviceType }
+          ]
+        });
+      }
+
+      const tableData = await Income.find(filter)
+        .populate('userId', 'username')
+        .sort({ transaction_date: 1, createdAt: 1 })
+        .lean();
+
+      const workbook = new ExcelJS.Workbook();
+      const sheet = workbook.addWorksheet('Income');
+      const headers = [
+        'Date',
+        'Payment Date',
+        'CDB No',
+        'Client Name',
+        'Mobile 1',
+        'Vehicle / Chassis',
+        'Service Type',
+        'Description',
+        'CCTV Details / Model',
+        'Serial No',
+        'Model',
+        'IMEI Last 6',
+        'VTS No',
+        'Technician',
+        'Reference (Given By)',
+        'Qty',
+        'Bill Amount',
+        'Received Amount',
+        'Previous Dues Received',
+        'Dues',
+        'Payment Mode',
+        'Cash Amount',
+        'UPI Amount',
+        'UPI / UTR Ref',
+        'Bank Person',
+        'Cash Received By',
+        'Executive'
+      ];
+      headers.forEach((h, idx) => {
+        const cell = sheet.getCell(1, idx + 1);
+        cell.value = h;
+        cell.font = { bold: true };
+        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF4F4F4' } };
+      });
+      [14, 14, 12, 28, 16, 20, 22, 30, 22, 18, 18, 16, 14, 18, 20, 8, 14, 16, 20, 14, 16, 14, 14, 20, 18, 20, 16].forEach((width, idx) => {
+        sheet.getColumn(idx + 1).width = width;
+      });
+      sheet.getColumn(1).numFmt = 'dd/mm/yyyy';
+      sheet.getColumn(2).numFmt = 'dd/mm/yyyy';
+      sheet.getColumn(17).numFmt = '#,##0.00';
+      sheet.getColumn(17).numFmt = '#,##0.00';
+      sheet.getColumn(18).numFmt = '#,##0.00';
+      sheet.getColumn(19).numFmt = '#,##0.00';
+      sheet.getColumn(21).numFmt = '#,##0.00';
+      sheet.getColumn(22).numFmt = '#,##0.00';
+
+      tableData.forEach((r, i) => {
+        const serviceType = String(r.serviceType || r.description || '').trim();
+        const isCctv = serviceType === 'CCTV Installation';
+        const row = i + 2;
+        sheet.getCell(row, 1).value = new Date(r.transaction_date || r.createdAt);
+        sheet.getCell(row, 2).value = r.paymentDate ? new Date(r.paymentDate) : null;
+        sheet.getCell(row, 3).value = r.cbNumber || '';
+        sheet.getCell(row, 4).value = r.clientName || '';
+        sheet.getCell(row, 5).value = r.mobile1 || '';
+        sheet.getCell(row, 6).value = r.vehicleChassisNo || '';
+        sheet.getCell(row, 7).value = serviceType;
+        sheet.getCell(row, 8).value = r.description || '';
+        sheet.getCell(row, 9).value = isCctv ? (r.cctvDetails || '') : (r.model || '');
+        sheet.getCell(row, 10).value = isCctv ? (r.cctvSerialNo || '') : '';
+        sheet.getCell(row, 11).value = isCctv ? '' : (r.model || '');
+        sheet.getCell(row, 12).value = r.imeiLastSix || '';
+        sheet.getCell(row, 13).value = r.vtsNo || '';
+        sheet.getCell(row, 14).value = r.technician || '';
+        sheet.getCell(row, 15).value = r.reference || '';
+        sheet.getCell(row, 16).value = r.quantity || 1;
+        sheet.getCell(row, 17).value = safeNum(r.billAmount);
+        sheet.getCell(row, 18).value = safeNum(r.receivedAmount);
+        sheet.getCell(row, 19).value = safeNum(r.previousDuesReceived);
+        sheet.getCell(row, 20).value = safeNum(r.dues);
+        sheet.getCell(row, 21).value = r.paymentMode || '';
+        sheet.getCell(row, 22).value = safeNum(r.cashAmount);
+        sheet.getCell(row, 23).value = safeNum(r.upiAmount);
+        sheet.getCell(row, 24).value = r.upiReferenceId || '';
+        sheet.getCell(row, 25).value = r.bankPersonName || '';
+        sheet.getCell(row, 26).value = r.cashReceivedBy || '';
+        sheet.getCell(row, 27).value = r.userId?.username || '';
+      });
+
+      const addSummaryBlock = (targetSheet, startCol, title, color, rows) => {
+        targetSheet.mergeCells(1, startCol, 1, startCol + 1);
+        const titleCell = targetSheet.getCell(1, startCol);
+        titleCell.value = title;
+        titleCell.font = { bold: true, color: { argb: 'FFFFFFFF' }, size: 13 };
+        titleCell.alignment = { horizontal: 'center' };
+        titleCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: color } };
+        rows.forEach(([label, formula], index) => {
+          const row = index + 2;
+          targetSheet.getCell(row, startCol).value = label;
+          targetSheet.getCell(row, startCol).font = { bold: true };
+          targetSheet.getCell(row, startCol + 1).value = { formula };
+          targetSheet.getCell(row, startCol + 1).numFmt = '#,##0.00';
+          if (index === rows.length - 1) {
+            targetSheet.getCell(row, startCol).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFEFEFEF' } };
+            targetSheet.getCell(row, startCol + 1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFEFEFEF' } };
+            targetSheet.getCell(row, startCol + 1).font = { bold: true };
+          }
+        });
+        targetSheet.getColumn(startCol).width = 32;
+        targetSheet.getColumn(startCol + 1).width = 16;
+      };
+
+      const summaryRows = {
+        revenue: [
+          ['Revenue till Yesterday', 'SUMIF(Income!A:A,"<"&TODAY(),Income!P:P)'],
+          ["Today's Revenue", 'SUMIF(Income!A:A,TODAY(),Income!P:P)'],
+          ['Total Revenue (Current Period)', 'SUM(Income!P:P)']
+        ],
+        received: [
+          ['Total Received till Yesterday', 'SUMIF(Income!A:A,"<"&TODAY(),Income!Q:Q)'],
+          ["Today's Received", 'SUMIF(Income!A:A,TODAY(),Income!Q:Q)'],
+          ['Previous Dues Amount Received (+)', 'SUM(Income!R:R)'],
+          ['Total Received (Current Period)', 'SUM(Income!Q:Q)+SUM(Income!R:R)']
+        ],
+        dues: [
+          ['Total Dues till Yesterday', 'SUMIF(Income!A:A,"<"&TODAY(),Income!S:S)'],
+          ["Today's Dues", 'SUMIF(Income!A:A,TODAY(),Income!S:S)'],
+          ['Previous Dues Amount Received (-)', 'SUM(Income!R:R)'],
+          ['Total Dues Till Date', 'SUM(Income!S:S)-SUM(Income!R:R)']
+        ]
+      };
+
+      addSummaryBlock(sheet, 28, 'REVENUE', 'FF15803D', summaryRows.revenue);
+      addSummaryBlock(sheet, 31, 'RECEIVED', 'FFCA8A04', summaryRows.received);
+      addSummaryBlock(sheet, 34, 'DUES', 'FFDC2626', summaryRows.dues);
+
+      const dashboardSheet = workbook.addWorksheet('Dashboard');
+      addSummaryBlock(dashboardSheet, 1, 'REVENUE', 'FF15803D', summaryRows.revenue);
+      addSummaryBlock(dashboardSheet, 4, 'RECEIVED', 'FFCA8A04', summaryRows.received);
+      addSummaryBlock(dashboardSheet, 7, 'DUES', 'FFDC2626', summaryRows.dues);
+      dashboardSheet.views = [{ state: 'frozen', ySplit: 1 }];
+
+      sheet.views = [{ state: 'frozen', ySplit: 1 }];
+      sheet.autoFilter = {
+        from: { row: 1, column: 1 },
+        to: { row: Math.max(tableData.length + 1, 1), column: headers.length }
+      };
+
+      const buffer = await workbook.xlsx.writeBuffer();
+      res.set({
+        'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        'Content-Disposition': `attachment; filename="${filename}"`,
+        'Content-Length': buffer.length
+      });
+      return res.end(buffer);
+    }
+
     // Fetch 2x period so we can split into Current + Previous
     const allData = await getRecordsByPeriod(Income, days * 2, userId);
 
@@ -572,6 +758,247 @@ const generateExpenseExcelByPeriod = async (req, res, days, filename) => {
   }
 };
 
+// ================= LEDGER (TRANSACTIONS + SUMMARY) =================
+// Each Income record produces:
+//   - 1 BILL row (amount = billAmount)
+//   - 1 PAYMENT row IF receivedAmount > 0 (amount = receivedAmount)
+// Summary sheet uses SUMIFS formulas referencing Transactions sheet,
+// so totals always stay consistent and self-recalculate in Excel.
+const generateLedgerExcelByPeriod = async (req, res, days, filename) => {
+  try {
+    const userId = req.query.userId || null;
+    const records = await getRecordsByPeriod(Income, days, userId);
+
+    const workbook = new ExcelJS.Workbook();
+    workbook.creator = 'Arshi Enterprises';
+    workbook.created = new Date();
+
+    // ============ SHEET 1: TRANSACTIONS ============
+    const txSheet = workbook.addWorksheet('Transactions');
+
+    const txHeaders = ['Date', 'CDB_ID', 'Customer Name', 'Type', 'Amount', 'Payment Mode', 'Description'];
+    txHeaders.forEach((h, i) => {
+      const cell = txSheet.getCell(1, i + 1);
+      cell.value = h;
+      cell.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1F4E78' } };
+      cell.alignment = { vertical: 'middle', horizontal: 'center' };
+      cell.border = {
+        top: { style: 'thin' }, bottom: { style: 'thin' },
+        left: { style: 'thin' }, right: { style: 'thin' }
+      };
+    });
+
+    txSheet.getColumn(1).width = 14;  // Date
+    txSheet.getColumn(2).width = 16;  // CDB_ID
+    txSheet.getColumn(3).width = 28;  // Customer Name
+    txSheet.getColumn(4).width = 12;  // Type
+    txSheet.getColumn(5).width = 14;  // Amount
+    txSheet.getColumn(6).width = 16;  // Payment Mode
+    txSheet.getColumn(7).width = 36;  // Description
+    txSheet.getColumn(5).numFmt = '#,##0.00';
+
+    // Build customer map for summary; also write rows
+    const customerMap = new Map(); // cbNumber -> { name }
+    let rowIdx = 2;
+
+    const writeTxRow = (date, cdbId, customer, type, amount, paymentMode, description) => {
+      txSheet.getCell(rowIdx, 1).value = formatDate(date);
+      txSheet.getCell(rowIdx, 2).value = cdbId;
+      txSheet.getCell(rowIdx, 3).value = customer;
+      txSheet.getCell(rowIdx, 4).value = type;
+      txSheet.getCell(rowIdx, 5).value = Number(amount) || 0;
+      txSheet.getCell(rowIdx, 6).value = paymentMode || '-';
+      txSheet.getCell(rowIdx, 7).value = description || '';
+
+      // Color BILL/PAYMENT type cells differently
+      const typeCell = txSheet.getCell(rowIdx, 4);
+      typeCell.alignment = { horizontal: 'center' };
+      typeCell.font = { bold: true };
+      if (type === 'BILL') {
+        typeCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFE699' } };
+      } else if (type === 'PAYMENT') {
+        typeCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFC6E0B4' } };
+      }
+      rowIdx += 1;
+    };
+
+    // Records are already sorted desc; iterate in chronological order for ledger feel
+    const ordered = [...records].sort((a, b) => new Date(a.transaction_date || a.createdAt) - new Date(b.transaction_date || b.createdAt));
+
+    ordered.forEach((rec) => {
+      const r = typeof rec.toObject === 'function' ? rec.toObject() : rec;
+      const cdbId = String(r.cbNumber || '').trim();
+      const customer = String(r.clientName || '').trim();
+      if (!customerMap.has(cdbId)) {
+        customerMap.set(cdbId, { name: customer });
+      }
+      const billAmt = Number(r.billAmount) || 0;
+      const recvAmt = Number(r.receivedAmount) || 0;
+      const desc = String(r.serviceType || r.description || r.item || '').trim();
+
+      // BILL row
+      writeTxRow(r.transaction_date || r.createdAt, cdbId, customer, 'BILL', billAmt, '-', desc);
+
+      // PAYMENT row(s) — current schema has one payment per record
+      if (recvAmt > 0) {
+        let pmLabel = '-';
+        const pm = String(r.paymentMode || '').toLowerCase();
+        if (pm === 'cash') pmLabel = 'Cash';
+        else if (pm === 'upi') pmLabel = `UPI${r.upiReferenceId ? ` (${r.upiReferenceId})` : ''}`;
+        else if (pm === 'split') {
+          const c = Number(r.cashAmount) || 0;
+          const u = Number(r.upiAmount) || 0;
+          pmLabel = `Split (Cash ${c} + UPI ${u}${r.upiReferenceId ? ` / ${r.upiReferenceId}` : ''})`;
+        }
+        writeTxRow(r.transaction_date || r.createdAt, cdbId, customer, 'PAYMENT', recvAmt, pmLabel, desc);
+      }
+    });
+
+    const lastTxRow = rowIdx - 1;
+    // Auto-filter on header row covering all data
+    txSheet.autoFilter = {
+      from: { row: 1, column: 1 },
+      to: { row: lastTxRow > 1 ? lastTxRow : 1, column: 7 }
+    };
+    txSheet.views = [{ state: 'frozen', ySplit: 1 }];
+
+    // Light borders on all data cells
+    for (let r = 2; r <= lastTxRow; r += 1) {
+      for (let c = 1; c <= 7; c += 1) {
+        const cell = txSheet.getCell(r, c);
+        cell.border = {
+          top: { style: 'thin', color: { argb: 'FFE0E0E0' } },
+          bottom: { style: 'thin', color: { argb: 'FFE0E0E0' } },
+          left: { style: 'thin', color: { argb: 'FFE0E0E0' } },
+          right: { style: 'thin', color: { argb: 'FFE0E0E0' } }
+        };
+      }
+    }
+
+    // ============ SHEET 2: SUMMARY (per customer with SUMIFS) ============
+    const sumSheet = workbook.addWorksheet('Summary');
+
+    const sumHeaders = ['CDB_ID', 'Customer Name', 'Total Bill', 'Total Payment', 'Due'];
+    sumHeaders.forEach((h, i) => {
+      const cell = sumSheet.getCell(1, i + 1);
+      cell.value = h;
+      cell.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1F4E78' } };
+      cell.alignment = { vertical: 'middle', horizontal: 'center' };
+      cell.border = {
+        top: { style: 'thin' }, bottom: { style: 'thin' },
+        left: { style: 'thin' }, right: { style: 'thin' }
+      };
+    });
+
+    sumSheet.getColumn(1).width = 16;
+    sumSheet.getColumn(2).width = 32;
+    sumSheet.getColumn(3).width = 16;
+    sumSheet.getColumn(4).width = 16;
+    sumSheet.getColumn(5).width = 16;
+    [3, 4, 5].forEach((c) => { sumSheet.getColumn(c).numFmt = '#,##0.00'; });
+
+    let sumRow = 2;
+    Array.from(customerMap.entries()).forEach(([cdbId, info]) => {
+      sumSheet.getCell(sumRow, 1).value = cdbId;
+      sumSheet.getCell(sumRow, 2).value = info.name;
+
+      // SUMIFS formulas reference Transactions sheet by absolute column refs
+      sumSheet.getCell(sumRow, 3).value = {
+        formula: `SUMIFS(Transactions!E:E, Transactions!B:B, A${sumRow}, Transactions!D:D, "BILL")`
+      };
+      sumSheet.getCell(sumRow, 4).value = {
+        formula: `SUMIFS(Transactions!E:E, Transactions!B:B, A${sumRow}, Transactions!D:D, "PAYMENT")`
+      };
+      sumSheet.getCell(sumRow, 5).value = { formula: `C${sumRow}-D${sumRow}` };
+
+      // Borders + alignment
+      for (let c = 1; c <= 5; c += 1) {
+        const cell = sumSheet.getCell(sumRow, c);
+        cell.border = {
+          top: { style: 'thin', color: { argb: 'FFE0E0E0' } },
+          bottom: { style: 'thin', color: { argb: 'FFE0E0E0' } },
+          left: { style: 'thin', color: { argb: 'FFE0E0E0' } },
+          right: { style: 'thin', color: { argb: 'FFE0E0E0' } }
+        };
+      }
+      sumRow += 1;
+    });
+
+    const lastSumRow = sumRow - 1;
+    if (lastSumRow >= 2) {
+      // Conditional formatting: highlight Due column red where Due > 0
+      sumSheet.addConditionalFormatting({
+        ref: `E2:E${lastSumRow}`,
+        rules: [
+          {
+            type: 'cellIs',
+            operator: 'greaterThan',
+            formulae: ['0'],
+            priority: 1,
+            style: {
+              fill: { type: 'pattern', pattern: 'solid', bgColor: { argb: 'FFF8CBAD' } },
+              font: { bold: true, color: { argb: 'FF9C0006' } }
+            }
+          },
+          {
+            type: 'cellIs',
+            operator: 'lessThanOrEqual',
+            formulae: ['0'],
+            priority: 2,
+            style: {
+              fill: { type: 'pattern', pattern: 'solid', bgColor: { argb: 'FFC6EFCE' } },
+              font: { color: { argb: 'FF006100' } }
+            }
+          }
+        ]
+      });
+
+      // Grand totals row
+      const totalRow = lastSumRow + 1;
+      sumSheet.getCell(totalRow, 2).value = 'GRAND TOTAL';
+      sumSheet.getCell(totalRow, 2).font = { bold: true };
+      sumSheet.getCell(totalRow, 3).value = { formula: `SUM(C2:C${lastSumRow})` };
+      sumSheet.getCell(totalRow, 4).value = { formula: `SUM(D2:D${lastSumRow})` };
+      sumSheet.getCell(totalRow, 5).value = { formula: `SUM(E2:E${lastSumRow})` };
+      for (let c = 2; c <= 5; c += 1) {
+        const cell = sumSheet.getCell(totalRow, c);
+        cell.font = { bold: true };
+        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFF2CC' } };
+        cell.border = {
+          top: { style: 'medium' }, bottom: { style: 'medium' },
+          left: { style: 'thin' }, right: { style: 'thin' }
+        };
+      }
+    }
+
+    // Auto-filter for summary sheet (filter by CDB_ID, customer)
+    sumSheet.autoFilter = {
+      from: { row: 1, column: 1 },
+      to: { row: Math.max(lastSumRow, 1), column: 5 }
+    };
+    sumSheet.views = [{ state: 'frozen', ySplit: 1 }];
+
+    const buffer = await workbook.xlsx.writeBuffer();
+    res.set({
+      'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      'Content-Disposition': `attachment; filename="${filename}"`,
+      'Content-Length': buffer.length
+    });
+    return res.end(buffer);
+  } catch (err) {
+    console.error('LEDGER EXCEL ERROR 👉', err);
+    return res.status(500).send(err.message);
+  }
+};
+
+const generateLedgerDailyExcel = (req, res) => generateLedgerExcelByPeriod(req, res, 1, 'ledger-daily.xlsx');
+const generateLedgerWeeklyExcel = (req, res) => generateLedgerExcelByPeriod(req, res, 7, 'ledger-weekly.xlsx');
+const generateLedgerMonthlyExcel = (req, res) => generateLedgerExcelByPeriod(req, res, 30, 'ledger-monthly.xlsx');
+const generateLedgerYearlyExcel = (req, res) => generateLedgerExcelByPeriod(req, res, 365, 'ledger-yearly.xlsx');
+const generateLedgerAllExcel = (req, res) => generateLedgerExcelByPeriod(req, res, 999999, 'ledger-all.xlsx');
+
 // ================= PUBLIC ENDPOINTS (EXCEL ONLY) =================
 // INCOME
 const generateIncomeDailyExcel = (req, res) => generateIncomeExcelByPeriod(req, res, 1, 'income-daily.xlsx');
@@ -586,6 +1013,300 @@ const generateExpenseWeeklyExcel = (req, res) => generateExpenseExcelByPeriod(re
 const generateExpenseMonthlyExcel = (req, res) => generateExpenseExcelByPeriod(req, res, 30, 'expense-monthly.xlsx');
 const generateExpenseYearlyExcel = (req, res) => generateExpenseExcelByPeriod(req, res, 365, 'expense-yearly.xlsx');
 const generateExpenseAllExcel = (req, res) => generateExpenseExcelByPeriod(req, res, 999999, 'expense-all.xlsx');
+
+// ===== CUSTOMER LEDGER EXCEL (by CDB_ID) =====
+const generateCustomerLedgerExcel = async (req, res) => {
+  try {
+    const { cdbId } = req.query;
+    if (!cdbId || !String(cdbId).trim()) {
+      return res.status(400).json({ message: "cdbId query parameter is required" });
+    }
+
+    const normalizedCdbId = String(cdbId).trim();
+    const incomes = await Income.find({ cbNumber: normalizedCdbId })
+      .populate("userId", "username")
+      .sort({ transaction_date: 1, createdAt: 1 })
+      .lean();
+
+    const workbook = new ExcelJS.Workbook();
+    workbook.creator = 'Arshi Enterprises';
+    workbook.created = new Date();
+
+    const sheet = workbook.addWorksheet('Customer Ledger');
+    const headers = ['Date', 'Type', 'Amount', 'Payment Mode', 'Description', 'Staff'];
+    headers.forEach((h, i) => {
+      const cell = sheet.getCell(1, i + 1);
+      cell.value = h;
+      cell.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1F4E78' } };
+      cell.alignment = { vertical: 'middle', horizontal: 'center' };
+    });
+
+    sheet.getColumn(1).width = 14;
+    sheet.getColumn(2).width = 12;
+    sheet.getColumn(3).width = 14;
+    sheet.getColumn(4).width = 24;
+    sheet.getColumn(5).width = 36;
+    sheet.getColumn(6).width = 18;
+    sheet.getColumn(3).numFmt = '#,##0.00';
+
+    let rowIdx = 2;
+    let totalBill = 0;
+    let totalPayment = 0;
+
+    incomes.forEach((inc) => {
+      const billAmt = Number(inc.billAmount) || 0;
+      const recvAmt = Number(inc.receivedAmount) || 0;
+
+      if (billAmt > 0) {
+        sheet.getCell(rowIdx, 1).value = formatDate(inc.transaction_date || inc.createdAt);
+        sheet.getCell(rowIdx, 2).value = 'BILL';
+        sheet.getCell(rowIdx, 3).value = billAmt;
+        sheet.getCell(rowIdx, 4).value = '-';
+        sheet.getCell(rowIdx, 5).value = String(inc.serviceType || inc.description || '').trim();
+        sheet.getCell(rowIdx, 6).value = inc.userId?.username || 'N/A';
+        totalBill += billAmt;
+        rowIdx++;
+      }
+      if (recvAmt > 0) {
+        let pmLabel = String(inc.paymentMode || '').toUpperCase();
+        if (inc.paymentMode === 'split') {
+          pmLabel = `Split (Cash ${Number(inc.cashAmount) || 0} + UPI ${Number(inc.upiAmount) || 0})`;
+        }
+        sheet.getCell(rowIdx, 1).value = formatDate(inc.transaction_date || inc.createdAt);
+        sheet.getCell(rowIdx, 2).value = 'PAYMENT';
+        sheet.getCell(rowIdx, 3).value = recvAmt;
+        sheet.getCell(rowIdx, 4).value = pmLabel;
+        sheet.getCell(rowIdx, 5).value = String(inc.serviceType || inc.description || '').trim();
+        sheet.getCell(rowIdx, 6).value = inc.userId?.username || 'N/A';
+        totalPayment += recvAmt;
+        rowIdx++;
+      }
+    });
+
+    const dataEndRow = rowIdx - 1;
+
+    // Summary block
+    const sumRow = dataEndRow + 2;
+    sheet.getCell(sumRow, 2).value = 'Total Bill:';
+    sheet.getCell(sumRow, 2).font = { bold: true };
+    sheet.getCell(sumRow, 3).value = totalBill;
+    sheet.getCell(sumRow, 3).numFmt = '#,##0.00';
+
+    sheet.getCell(sumRow + 1, 2).value = 'Total Payment:';
+    sheet.getCell(sumRow + 1, 2).font = { bold: true };
+    sheet.getCell(sumRow + 1, 3).value = totalPayment;
+    sheet.getCell(sumRow + 1, 3).numFmt = '#,##0.00';
+
+    sheet.getCell(sumRow + 2, 2).value = 'Due:';
+    sheet.getCell(sumRow + 2, 2).font = { bold: true };
+    sheet.getCell(sumRow + 2, 3).value = Math.max(0, totalBill - totalPayment);
+    sheet.getCell(sumRow + 2, 3).numFmt = '#,##0.00';
+
+    if (dataEndRow >= 2) {
+      sheet.autoFilter = {
+        from: { row: 1, column: 1 },
+        to: { row: dataEndRow, column: 6 }
+      };
+      sheet.views = [{ state: 'frozen', ySplit: 1 }];
+    }
+
+    const buffer = await workbook.xlsx.writeBuffer();
+    res.set({
+      'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      'Content-Disposition': `attachment; filename="ledger-${normalizedCdbId}.xlsx"`,
+      'Content-Length': buffer.length
+    });
+    return res.end(buffer);
+  } catch (err) {
+    console.error('CUSTOMER LEDGER EXCEL ERROR 👉', err);
+    return res.status(500).send(err.message);
+  }
+};
+
+// ===== DUE SUMMARY EXCEL (all customers) =====
+const generateDueSummaryExcel = async (req, res) => {
+  try {
+    const summary = await Item.aggregate([
+      {
+        $group: {
+          _id: "$cdbId",
+          clientName: { $first: "$clientName" },
+          totalBill: { $sum: "$price" },
+          totalPaid: { $sum: "$paidAmount" },
+          totalDue: { $sum: "$dueAmount" }
+        }
+      },
+      { $sort: { totalDue: -1 } }
+    ]);
+
+    const workbook = new ExcelJS.Workbook();
+    workbook.creator = 'Arshi Enterprises';
+    workbook.created = new Date();
+
+    const sheet = workbook.addWorksheet('Due Summary');
+    const headers = ['CDB_ID', 'Customer Name', 'Total Bill', 'Total Paid', 'Due', 'Status'];
+    headers.forEach((h, i) => {
+      const cell = sheet.getCell(1, i + 1);
+      cell.value = h;
+      cell.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1F4E78' } };
+      cell.alignment = { vertical: 'middle', horizontal: 'center' };
+    });
+
+    sheet.getColumn(1).width = 14;
+    sheet.getColumn(2).width = 28;
+    sheet.getColumn(3).width = 16;
+    sheet.getColumn(4).width = 16;
+    sheet.getColumn(5).width = 16;
+    sheet.getColumn(6).width = 14;
+    [3, 4, 5].forEach((c) => { sheet.getColumn(c).numFmt = '#,##0.00'; });
+
+    let rowIdx = 2;
+    summary.forEach((s) => {
+      sheet.getCell(rowIdx, 1).value = s._id;
+      sheet.getCell(rowIdx, 2).value = s.clientName || 'Unknown';
+      sheet.getCell(rowIdx, 3).value = s.totalBill || 0;
+      sheet.getCell(rowIdx, 4).value = s.totalPaid || 0;
+      sheet.getCell(rowIdx, 5).value = s.totalDue || 0;
+      sheet.getCell(rowIdx, 6).value = (s.totalDue || 0) <= 0 ? 'PAID' : 'DUE';
+
+      // Conditional color for Due / Status
+      if ((s.totalDue || 0) > 0) {
+        sheet.getCell(rowIdx, 5).font = { bold: true, color: { argb: 'FF9C0006' } };
+        sheet.getCell(rowIdx, 6).font = { bold: true, color: { argb: 'FF9C0006' } };
+      } else {
+        sheet.getCell(rowIdx, 6).font = { bold: true, color: { argb: 'FF006100' } };
+      }
+      rowIdx++;
+    });
+
+    // Grand totals
+    const totalRow = rowIdx;
+    sheet.getCell(totalRow, 2).value = 'GRAND TOTAL';
+    sheet.getCell(totalRow, 2).font = { bold: true };
+    sheet.getCell(totalRow, 3).value = { formula: `SUM(C2:C${rowIdx - 1})` };
+    sheet.getCell(totalRow, 4).value = { formula: `SUM(D2:D${rowIdx - 1})` };
+    sheet.getCell(totalRow, 5).value = { formula: `SUM(E2:E${rowIdx - 1})` };
+    sheet.getCell(totalRow, 6).value = '-';
+    for (let c = 2; c <= 6; c++) {
+      sheet.getCell(totalRow, c).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFF2CC' } };
+      sheet.getCell(totalRow, c).font = { bold: true };
+    }
+
+    if (rowIdx > 2) {
+      sheet.autoFilter = {
+        from: { row: 1, column: 1 },
+        to: { row: rowIdx - 1, column: 6 }
+      };
+      sheet.views = [{ state: 'frozen', ySplit: 1 }];
+    }
+
+    const buffer = await workbook.xlsx.writeBuffer();
+    res.set({
+      'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      'Content-Disposition': 'attachment; filename="due-summary.xlsx"',
+      'Content-Length': buffer.length
+    });
+    return res.end(buffer);
+  } catch (err) {
+    console.error('DUE SUMMARY EXCEL ERROR 👉', err);
+    return res.status(500).send(err.message);
+  }
+};
+
+// ===== IMEI TRACKING EXCEL =====
+const generateImeiTrackingExcel = async (req, res) => {
+  try {
+    const { search } = req.query;
+    let query = {};
+    if (search && String(search).trim()) {
+      const term = String(search).trim();
+      query = {
+        $or: [
+          { imeiSerial: { $regex: term, $options: "i" } },
+          { cdbId: { $regex: term, $options: "i" } },
+          { itemName: { $regex: term, $options: "i" } },
+          { clientName: { $regex: term, $options: "i" } }
+        ]
+      };
+    }
+
+    const items = await Item.find(query).sort({ date: -1 }).lean();
+
+    const workbook = new ExcelJS.Workbook();
+    workbook.creator = 'Arshi Enterprises';
+    workbook.created = new Date();
+
+    const sheet = workbook.addWorksheet('IMEI Tracking');
+    const headers = ['Date', 'CDB_ID', 'Customer', 'Item Name', 'IMEI / Serial', 'Price', 'Paid', 'Due', 'Status'];
+    headers.forEach((h, i) => {
+      const cell = sheet.getCell(1, i + 1);
+      cell.value = h;
+      cell.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1F4E78' } };
+      cell.alignment = { vertical: 'middle', horizontal: 'center' };
+    });
+
+    sheet.getColumn(1).width = 14;
+    sheet.getColumn(2).width = 14;
+    sheet.getColumn(3).width = 24;
+    sheet.getColumn(4).width = 28;
+    sheet.getColumn(5).width = 22;
+    sheet.getColumn(6).width = 14;
+    sheet.getColumn(7).width = 14;
+    sheet.getColumn(8).width = 14;
+    sheet.getColumn(9).width = 12;
+    [6, 7, 8].forEach((c) => { sheet.getColumn(c).numFmt = '#,##0.00'; });
+
+    let rowIdx = 2;
+    items.forEach((item) => {
+      sheet.getCell(rowIdx, 1).value = formatDate(item.date);
+      sheet.getCell(rowIdx, 2).value = item.cdbId;
+      sheet.getCell(rowIdx, 3).value = item.clientName || '';
+      sheet.getCell(rowIdx, 4).value = item.itemName || '';
+      sheet.getCell(rowIdx, 5).value = item.imeiSerial || '';
+      sheet.getCell(rowIdx, 6).value = item.price || 0;
+      sheet.getCell(rowIdx, 7).value = item.paidAmount || 0;
+      sheet.getCell(rowIdx, 8).value = item.dueAmount || 0;
+      sheet.getCell(rowIdx, 9).value = item.status || 'UNPAID';
+
+      // Status color coding
+      const statusCell = sheet.getCell(rowIdx, 9);
+      statusCell.alignment = { horizontal: 'center' };
+      if (item.status === 'PAID') {
+        statusCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFC6EFCE' } };
+        statusCell.font = { color: { argb: 'FF006100' }, bold: true };
+      } else if (item.status === 'PARTIAL') {
+        statusCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFE699' } };
+        statusCell.font = { color: { argb: 'FF9C5700' }, bold: true };
+      } else {
+        statusCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF8CBAD' } };
+        statusCell.font = { color: { argb: 'FF9C0006' }, bold: true };
+      }
+      rowIdx++;
+    });
+
+    if (rowIdx > 2) {
+      sheet.autoFilter = {
+        from: { row: 1, column: 1 },
+        to: { row: rowIdx - 1, column: 9 }
+      };
+      sheet.views = [{ state: 'frozen', ySplit: 1 }];
+    }
+
+    const buffer = await workbook.xlsx.writeBuffer();
+    res.set({
+      'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      'Content-Disposition': `attachment; filename="imei-tracking${search ? '-' + String(search).trim() : ''}.xlsx"`,
+      'Content-Length': buffer.length
+    });
+    return res.end(buffer);
+  } catch (err) {
+    console.error('IMEI TRACKING EXCEL ERROR 👉', err);
+    return res.status(500).send(err.message);
+  }
+};
 
 // ===== LEGACY =====
 const generateIncomeExcelReport = (req, res) => generateIncomeExcelByPeriod(req, res, 30, 'income-report.xlsx');
@@ -605,5 +1326,17 @@ module.exports = {
   generateExpenseWeeklyExcel,
   generateExpenseMonthlyExcel,
   generateExpenseYearlyExcel,
-  generateExpenseAllExcel
+  generateExpenseAllExcel,
+
+  // Ledger (Transaction-based) Reports
+  generateLedgerDailyExcel,
+  generateLedgerWeeklyExcel,
+  generateLedgerMonthlyExcel,
+  generateLedgerYearlyExcel,
+  generateLedgerAllExcel,
+
+  // Due & Item Tracking Reports
+  generateCustomerLedgerExcel,
+  generateDueSummaryExcel,
+  generateImeiTrackingExcel
 };

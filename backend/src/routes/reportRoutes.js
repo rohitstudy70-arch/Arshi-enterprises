@@ -14,7 +14,15 @@ const {
   generateExpenseWeeklyExcel,
   generateExpenseMonthlyExcel,
   generateExpenseYearlyExcel,
-  generateExpenseAllExcel
+  generateExpenseAllExcel,
+  generateLedgerDailyExcel,
+  generateLedgerWeeklyExcel,
+  generateLedgerMonthlyExcel,
+  generateLedgerYearlyExcel,
+  generateLedgerAllExcel,
+  generateCustomerLedgerExcel,
+  generateDueSummaryExcel,
+  generateImeiTrackingExcel
 } = require("../controllers/reportController");
 
 router.use(protect);
@@ -34,5 +42,17 @@ router.get("/expense/weekly/excel", generateExpenseWeeklyExcel);
 router.get("/expense/monthly/excel", generateExpenseMonthlyExcel);
 router.get("/expense/yearly/excel", generateExpenseYearlyExcel);
 router.get("/expense/all/excel", generateExpenseAllExcel);
+
+// LEDGER REPORTS (Transactions + Summary sheets)
+router.get("/ledger/daily/excel", generateLedgerDailyExcel);
+router.get("/ledger/weekly/excel", generateLedgerWeeklyExcel);
+router.get("/ledger/monthly/excel", generateLedgerMonthlyExcel);
+router.get("/ledger/yearly/excel", generateLedgerYearlyExcel);
+router.get("/ledger/all/excel", generateLedgerAllExcel);
+
+// DUE & ITEM TRACKING REPORTS
+router.get("/due/customer-ledger/excel", generateCustomerLedgerExcel);
+router.get("/due/summary/excel", generateDueSummaryExcel);
+router.get("/due/imei-tracking/excel", generateImeiTrackingExcel);
 
 module.exports = router;

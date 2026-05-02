@@ -156,11 +156,39 @@ const deleteUser = async (req, res) => {
   }
 };
 
+const updateUserPassword = async (req, res) => {
+  try {
+    const { password } = req.body;
+
+    if (!password || String(password).length < 6) {
+      return res.status(400).json({ message: "Password must be at least 6 characters" });
+    }
+
+    const user = await User.findById(req.params.id).select("+password role");
+
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    if (user.role !== "executive") {
+      return res.status(403).json({ message: "Only executive user passwords can be changed" });
+    }
+
+    user.password = password;
+    await user.save();
+
+    return res.status(200).json({ message: "Password updated successfully" });
+  } catch (error) {
+    return res.status(500).json({ message: error.message });
+  }
+};
+
 module.exports = {
   register,
   login,
   getProfile,
   getAllUsers,
   getUserById,
-  deleteUser
+  deleteUser,
+  updateUserPassword
 };

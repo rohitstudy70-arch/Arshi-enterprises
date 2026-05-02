@@ -2,19 +2,26 @@ import { useEffect, useState } from "react";
 import api from "../api";
 import StatCard from "../components/StatCard";
 import { downloadIncomeExcelReport, downloadExpenseExcelReport } from "../utils/reportDownload";
-import { formatCurrency, formatMonthLabel } from "../utils/formatters";
+import { formatCurrency, formatDate, formatMonthLabel } from "../utils/formatters";
 
 const DashboardPage = () => {
   const [dashboard, setDashboard] = useState(null);
   const [loading, setLoading] = useState(true);
   const [exporting, setExporting] = useState("");
+  const [selectedMonth, setSelectedMonth] = useState("");
+  const [reportPeriod, setReportPeriod] = useState("month");
 
   useEffect(() => {
     let mounted = true;
 
     const loadDashboard = async () => {
       try {
-        const { data } = await api.get("/dashboard");
+        const { data } = await api.get("/dashboard", {
+          params: {
+            period: reportPeriod,
+            ...(reportPeriod === "month" && selectedMonth ? { month: selectedMonth } : {})
+          }
+        });
 
         if (mounted) {
           setDashboard(data);
@@ -31,13 +38,48 @@ const DashboardPage = () => {
     return () => {
       mounted = false;
     };
-  }, []);
+  }, [selectedMonth, reportPeriod]);
 
   if (loading) {
     return <div className="panel p-8 text-sm font-semibold text-muted">Loading Arshi Enterprises dashboard...</div>;
   }
 
   const monthlySummary = dashboard?.monthlySummary || [];
+  const financialSummary = dashboard?.financialSummary || {};
+  const financialSections = [
+    {
+      title: "Revenue",
+      tone: "border-emerald-200 bg-emerald-50",
+      heading: "text-emerald-800",
+      rows: [
+        ["Revenue till Yesterday", financialSummary.revenueTillYesterday],
+        ["Today's Revenue", financialSummary.todayRevenue],
+        ["Total Revenue (Current Period)", financialSummary.totalRevenue]
+      ]
+    },
+    {
+      title: "Received",
+      tone: "border-yellow-200 bg-yellow-50",
+      heading: "text-yellow-800",
+      rows: [
+        ["Total Received till Yesterday", financialSummary.receivedTillYesterday],
+        ["Today's Received", financialSummary.todayReceived],
+        ["Previous Dues Amount Received (+)", financialSummary.previousDuesReceived],
+        ["Total Received (Current Period)", financialSummary.totalReceived]
+      ]
+    },
+    {
+      title: "Dues",
+      tone: "border-red-200 bg-red-50",
+      heading: "text-red-800",
+      rows: [
+        ["Total Dues till Yesterday", financialSummary.duesTillYesterday],
+        ["Today's Dues", financialSummary.todayDues],
+        ["Previous Dues Amount Received (-)", financialSummary.previousDuesReceived],
+        ["Total Dues Till Date", financialSummary.totalDues]
+      ]
+    }
+  ];
   const maxValue = Math.max(
     ...monthlySummary.flatMap((item) => [item.income || 0, item.expense || 0]),
     1
@@ -48,7 +90,7 @@ const DashboardPage = () => {
 
     try {
       if (type === "income-excel") {
-        await downloadIncomeExcelReport("monthly");
+        await downloadIncomeExcelReport("monthly", { month: selectedMonth });
         return;
       }
 
@@ -69,6 +111,22 @@ const DashboardPage = () => {
             <p className="text-xs font-bold uppercase tracking-[0.22em] text-muted">Exports</p>
             <h3 className="mt-2 text-2xl font-bold text-ink">Download reports</h3>
             <p className="mt-2 text-sm text-muted">Download monthly Excel summaries for income and expense.</p>
+          </div>
+          <div className="w-full lg:max-w-xs">
+            <label className="label">Report Type</label>
+            <select className="field mb-3" value={reportPeriod} onChange={(event) => setReportPeriod(event.target.value)}>
+              <option value="day">Day-wise</option>
+              <option value="month">Month-wise</option>
+              <option value="year">Year-wise</option>
+            </select>
+            <label className="label">Select Month</label>
+            <input
+              className="field"
+              type="month"
+              value={selectedMonth}
+              onChange={(event) => setSelectedMonth(event.target.value)}
+              disabled={reportPeriod !== "month"}
+            />
           </div>
           <div className="flex flex-col gap-3 sm:flex-row">
             <button
@@ -91,6 +149,27 @@ const DashboardPage = () => {
         </div>
       </section>
 
+      <section className="grid gap-4 xl:grid-cols-3">
+        {financialSections.map((section) => (
+          <div key={section.title} className={`rounded-2xl border p-5 ${section.tone}`}>
+            <h3 className={`text-lg font-bold ${section.heading}`}>{section.title}</h3>
+            <div className="mt-4 space-y-3">
+              {section.rows.map(([label, value], index) => (
+                <div
+                  key={label}
+                  className={`flex items-center justify-between gap-4 rounded-xl bg-white/75 px-4 py-3 ${
+                    index === section.rows.length - 1 ? "font-bold" : "font-semibold"
+                  }`}
+                >
+                  <span className="text-sm text-ink">{label}</span>
+                  <span className="text-right text-sm">{formatCurrency(value)}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        ))}
+      </section>
+
       <section className="grid gap-4 md:grid-cols-3">
         <StatCard
           title="Today's Revenue"
@@ -110,6 +189,46 @@ const DashboardPage = () => {
           tone="dues"
           subtitle="Open amount still pending collection"
         />
+      </section>
+
+      <section className="panel p-6">
+        <div className="mb-5 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <p className="text-xs font-bold uppercase tracking-[0.22em] text-muted">Date-wise Report</p>
+            <h3 className="mt-2 text-2xl font-bold text-ink">
+              {dashboard?.selectedMonth ? formatMonthLabel(dashboard.selectedMonth) : "Selected date range"}
+            </h3>
+          </div>
+          <p className="text-sm text-muted">
+            {dashboard?.dateWiseBreakdown?.reduce((sum, row) => sum + (row.entries || 0), 0) || 0} entries
+          </p>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="min-w-full text-left text-sm">
+            <thead>
+              <tr className="border-b border-line/80 text-xs font-semibold uppercase tracking-[0.14em] text-muted">
+                <th className="px-3 py-2">Date</th>
+                <th className="px-3 py-2 text-right">Entries</th>
+                <th className="px-3 py-2 text-right">Bill</th>
+                <th className="px-3 py-2 text-right">Received</th>
+                <th className="px-3 py-2 text-right">Previous Dues Received</th>
+                <th className="px-3 py-2 text-right">Dues</th>
+              </tr>
+            </thead>
+            <tbody>
+              {(dashboard?.dateWiseBreakdown || []).map((row) => (
+                <tr key={row.date} className="border-b border-line/60">
+                  <td className="px-3 py-3 font-semibold text-ink">{formatDate(row.date)}</td>
+                  <td className="px-3 py-3 text-right">{row.entries}</td>
+                  <td className="px-3 py-3 text-right">{formatCurrency(row.totalBill)}</td>
+                  <td className="px-3 py-3 text-right">{formatCurrency(row.totalAmount)}</td>
+                  <td className="px-3 py-3 text-right">{formatCurrency(row.previousDuesReceived)}</td>
+                  <td className="px-3 py-3 text-right">{formatCurrency(row.totalDues)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </section>
 
       <section className="panel p-6">

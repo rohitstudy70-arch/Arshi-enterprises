@@ -16,7 +16,13 @@ const RoleHomeRedirect = () => {
     return <Navigate to="/login" replace />;
   }
 
-  return <Navigate to={user?.role === "admin" ? "/admin" : "/executive"} replace />;
+  if (user?.role === "admin") {
+    return <Navigate to="/admin" replace />;
+  }
+  if (user?.role === "expense-only") {
+    return <Navigate to="/expense-panel" replace />;
+  }
+  return <Navigate to="/executive" replace />;
 };
 
 export default RoleHomeRedirect;

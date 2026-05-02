@@ -1,5 +1,6 @@
 const Income = require("../models/Income");
 const { buildScopedFilter } = require("../utils/recordFilters");
+const { recalculateFromIncome, recalculateOnCdbChange, recalculateItemsForCdbId } = require("../services/dueService");
 
 // ===== STATUS HELPER =====
 const getStatusCode = (error) => {
@@ -24,6 +25,9 @@ const addIncome = async (req, res) => {
   try {
     const {
       clientName,
+      transaction_date,
+      paymentDate,
+      serviceType,
       description,
       reference,
       mobile1,
@@ -41,6 +45,7 @@ const addIncome = async (req, res) => {
       quantity,
       billAmount,
       receivedAmount,
+      previousDuesReceived,
       paymentMode,
       upiReferenceId,
       bankPersonName,
@@ -51,12 +56,20 @@ const addIncome = async (req, res) => {
       cctvSerialNo
     } = req.body;
 
+    // Only admin can submit previous dues received
+    if (previousDuesReceived && req.user.role !== "admin") {
+      return res.status(403).json({ message: "Only admin can submit previous dues received" });
+    }
+
     const cdbNumber = await getNextCdbNumber();
 
     const income = await Income.create({
       userId: req.user.id,
       clientName,
       cbNumber: cdbNumber,
+      transaction_date,
+      paymentDate,
+      serviceType,
       description,
       reference,
       mobile1,
@@ -74,6 +87,7 @@ const addIncome = async (req, res) => {
       quantity,
       billAmount,
       receivedAmount,
+      previousDuesReceived,
       paymentMode,
       upiReferenceId,
       bankPersonName,
@@ -83,6 +97,9 @@ const addIncome = async (req, res) => {
       cctvDetails,
       cctvSerialNo
     });
+
+    // Recalculate item-level dues for this customer
+    await recalculateFromIncome(income);
 
     return res.status(201).json({ income });
   } catch (error) {
@@ -97,7 +114,7 @@ const getIncomes = async (req, res) => {
     const filter = buildScopedFilter(req.user, req.query);
     const incomes = await Income.find(filter)
       .populate("userId", "username role")
-      .sort({ createdAt: -1 });
+      .sort({ transaction_date: 1, createdAt: 1 });
 
     return res.status(200).json({ incomes });
   } catch (error) {
@@ -112,6 +129,9 @@ const updateIncome = async (req, res) => {
     const allowedFields = [
       "clientName",
       "cbNumber",
+      "transaction_date",
+      "paymentDate",
+      "serviceType",
       "description",
       "reference",
       "mobile1",
@@ -129,6 +149,7 @@ const updateIncome = async (req, res) => {
       "quantity",
       "billAmount",
       "receivedAmount",
+      "previousDuesReceived",
       "paymentMode",
       "upiReferenceId",
       "bankPersonName",
@@ -145,6 +166,11 @@ const updateIncome = async (req, res) => {
       )
     );
 
+    // Only admin can update previous dues received
+    if (updates.previousDuesReceived && req.user.role !== "admin") {
+      return res.status(403).json({ message: "Only admin can update previous dues received" });
+    }
+
     const income = await Income.findById(req.params.id);
 
     if (!income) {
@@ -155,8 +181,12 @@ const updateIncome = async (req, res) => {
       return res.status(403).json({ message: "You can only edit your own records" });
     }
 
+    const oldCbNumber = income.cbNumber;
     Object.assign(income, updates);
     await income.save();
+
+    // Recalculate item-level dues for affected CDB_ID(s)
+    await recalculateOnCdbChange(oldCbNumber, income.cbNumber);
 
     const populatedIncome = await Income.findById(income._id)
       .populate("userId", "username role");
@@ -181,7 +211,11 @@ const deleteIncome = async (req, res) => {
       return res.status(403).json({ message: "You can only delete your own records" });
     }
 
+    const deletedCbNumber = income.cbNumber;
     await income.deleteOne();
+
+    // Recalculate item-level dues for this customer after deletion
+    await recalculateItemsForCdbId(deletedCbNumber);
 
     return res.status(200).json({
       message: "Income record deleted successfully"

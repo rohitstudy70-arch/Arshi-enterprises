@@ -8,6 +8,8 @@ const incomeRoutes = require("./src/routes/incomeRoutes");
 const expenseRoutes = require("./src/routes/expenseRoutes");
 const dashboardRoutes = require("./src/routes/dashboardRoutes");
 const reportRoutes = require("./src/routes/reportRoutes");
+const dueRoutes = require("./src/routes/dueRoutes");
+const paymentRoutes = require("./src/routes/paymentRoutes");
 const ensureAdminUser = require("./src/utils/ensureAdminUser");
 
 const app = express();
@@ -41,6 +43,8 @@ app.use("/api/incomes", incomeRoutes);
 app.use("/api/expenses", expenseRoutes);
 app.use("/api/dashboard", dashboardRoutes);
 app.use("/api/reports", reportRoutes);
+app.use("/api/due", dueRoutes);
+app.use("/api/payments", paymentRoutes);
 
 app.use((req, res) => {
   res.status(404).json({ message: "Route not found" });

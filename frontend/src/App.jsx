@@ -5,6 +5,7 @@ import PublicOnlyRoute from "./components/PublicOnlyRoute";
 import RoleHomeRedirect from "./components/RoleHomeRedirect";
 import { AuthProvider } from "./context/AuthContext";
 import AdminPanelPage from "./pages/AdminPanelPage";
+import ExpenseOnlyPanel from "./pages/ExpenseOnlyPanel";
 import LoginPage from "./pages/LoginPage";
 import ExecutivePanelPage from "./pages/ExecutivePanelPage";
 
@@ -32,6 +33,9 @@ const App = () => {
               <Route path="/dashboard" element={<RoleHomeRedirect />} />
               <Route element={<ProtectedRoute allowedRoles={["executive"]} />}>
                 <Route path="/executive" element={<ExecutivePanelPage />} />
+              </Route>
+              <Route element={<ProtectedRoute allowedRoles={["expense-only"]} />}>
+                <Route path="/expense-panel" element={<ExpenseOnlyPanel />} />
               </Route>
               <Route element={<ProtectedRoute allowedRoles={["admin"]} />}>
                 <Route path="/admin" element={<AdminPanelPage />} />

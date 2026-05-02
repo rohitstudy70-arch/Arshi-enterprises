@@ -4,7 +4,23 @@ import DataTable from "../components/DataTable";
 import { formatCurrency, formatDate } from "../utils/formatters";
 import { calculateDues } from "../utils/incomeCalculations";
 
+const toDateInputValue = (date) => {
+  const d = new Date(date);
+  d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
+  return d.toISOString().slice(0, 10);
+};
+
+const todayInputValue = () => toDateInputValue(new Date());
+
+const minBackdateValue = () => {
+  const date = new Date();
+  date.setMonth(date.getMonth() - 1, 1);
+  return toDateInputValue(date);
+};
+
 const initialIncomeForm = {
+  transaction_date: todayInputValue(),
+  paymentDate: "",
   clientName: "",
   mobile1: "",
   mobile2: "",
@@ -12,6 +28,7 @@ const initialIncomeForm = {
   address: "",
   district: "",
   vehicleChassisNo: "",
+  serviceType: "",
   description: "",
   model: "",
   imeiNo: "",
@@ -73,11 +90,12 @@ const ExecutivePanelPage = () => {
   const [editing, setEditing] = useState(null); // { type: "income"|"expense", data }
   const [savingEdit, setSavingEdit] = useState(false);
   const [editError, setEditError] = useState("");
+  const [selectedMonth, setSelectedMonth] = useState("");
   const incomeDues = calculateDues(incomeForm.billAmount, incomeForm.receivedAmount);
 
-  const loadRecords = async () => {
+  const loadRecords = async (month = selectedMonth) => {
     const [{ data: incomeData }, { data: expenseData }] = await Promise.all([
-      api.get("/incomes"),
+      api.get("/incomes", { params: month ? { month } : {} }),
       api.get("/expenses")
     ]);
     setIncomes(incomeData.incomes);
@@ -123,6 +141,19 @@ const ExecutivePanelPage = () => {
         };
       }
 
+      if (name === "serviceType") {
+        return {
+          ...current,
+          serviceType: value,
+          vehicleChassisNo: "",
+          model: "",
+          imeiNo: "",
+          imeiLastSix: "",
+          vtsNo: "",
+          cctvDetails: ""
+        };
+      }
+
       return {
         ...current,
         [name]: value
@@ -140,14 +171,14 @@ const ExecutivePanelPage = () => {
   };
 
   const validateIncome = (form) => {
-    const isCctvMaterial = form.description === "CCTV Material";
+    const isCctvInstallation = form.serviceType === "CCTV Installation";
 
     const requiredFields = [
       { key: "clientName", label: "Client Name / ID" },
       { key: "mobile1", label: "Mobile No 1" },
-      { key: "description", label: "Description / Item" },
-      // Vehicle-specific fields skipped for CCTV Material
-      ...(isCctvMaterial
+      { key: "transaction_date", label: "Date" },
+      { key: "serviceType", label: "Service Type" },
+      ...(isCctvInstallation
         ? []
         : [
           { key: "model", label: "Model" },
@@ -176,11 +207,15 @@ const ExecutivePanelPage = () => {
       missing.push("Cash Received By");
     }
 
-    if (isCctvMaterial && !String(form.cctvDetails || "").trim()) {
+    if (isCctvInstallation && !String(form.cctvDetails || "").trim()) {
       missing.push("CCTV Details / Model");
     }
-    if (isCctvMaterial && !String(form.cctvSerialNo || "").trim()) {
-      missing.push("Serial No");
+
+    const selectedDate = new Date(`${form.transaction_date}T00:00:00`);
+    const minDate = new Date(`${minBackdateValue()}T00:00:00`);
+    const maxDate = new Date(`${todayInputValue()}T23:59:59`);
+    if (selectedDate < minDate || selectedDate > maxDate) {
+      return "Date must be in the current month or previous month. Future dates are not allowed.";
     }
 
     if (form.paymentMode === "split") {
@@ -234,10 +269,11 @@ const ExecutivePanelPage = () => {
     try {
       await api.post("/incomes", {
         ...incomeForm,
-        item: incomeForm.description,
+        item: incomeForm.serviceType,
         quantity: Number(incomeForm.quantity),
         billAmount: Number(incomeForm.billAmount),
         receivedAmount: Number(incomeForm.receivedAmount),
+        paymentDate: incomeForm.paymentDate || null,
         upiReferenceId:
           incomeForm.paymentMode === "upi" || incomeForm.paymentMode === "split"
             ? incomeForm.upiReferenceId
@@ -323,7 +359,15 @@ const ExecutivePanelPage = () => {
 
   const openEdit = (type, row) => {
     setEditError("");
-    setEditing({ type, data: { ...row } });
+    setEditing({
+      type,
+      data: {
+        ...row,
+        transaction_date: (row.transaction_date || row.createdAt || "").slice(0, 10),
+        paymentDate: row.paymentDate ? row.paymentDate.slice(0, 10) : "",
+        serviceType: row.serviceType || row.description || ""
+      }
+    });
   };
 
   const closeEdit = () => {
@@ -338,6 +382,16 @@ const ExecutivePanelPage = () => {
       data: {
         ...current.data,
         [name]: value,
+        ...(name === "serviceType"
+          ? {
+            vehicleChassisNo: "",
+            model: "",
+            imeiNo: "",
+            imeiLastSix: "",
+            vtsNo: "",
+            cctvDetails: ""
+          }
+          : {}),
         ...(name === "paymentMode" && value !== "upi" ? { upiReferenceId: "" } : {})
       }
     }));
@@ -366,14 +420,17 @@ const ExecutivePanelPage = () => {
       if (type === "income") {
         await api.put(`/incomes/${data._id}`, {
           clientName: data.clientName,
+          transaction_date: data.transaction_date,
+          paymentDate: data.paymentDate || null,
           mobile1: data.mobile1,
           mobile2: data.mobile2,
           clientUserId: data.clientUserId,
           address: data.address,
           district: data.district,
           vehicleChassisNo: data.vehicleChassisNo,
+          serviceType: data.serviceType,
           description: data.description,
-          item: data.description,
+          item: data.serviceType,
           model: data.model,
           imeiLastSix: data.imeiLastSix,
           vtsNo: data.vtsNo,
@@ -388,8 +445,8 @@ const ExecutivePanelPage = () => {
           cashReceivedBy: data.cashReceivedBy || "",
           cashAmount: data.paymentMode === "split" ? Number(data.cashAmount || 0) : 0,
           upiAmount: data.paymentMode === "split" ? Number(data.upiAmount || 0) : 0,
-          cctvDetails: data.description === "CCTV Material" ? (data.cctvDetails || "") : "",
-          cctvSerialNo: data.description === "CCTV Material" ? (data.cctvSerialNo || "") : ""
+          cctvDetails: data.serviceType === "CCTV Installation" ? (data.cctvDetails || "") : "",
+          cctvSerialNo: ""
         });
       } else {
         await api.put(`/expenses/${data._id}`, {
@@ -430,11 +487,13 @@ const ExecutivePanelPage = () => {
   );
 
   const incomeColumns = [
+    { key: "transaction_date", header: "Date", render: (row) => formatDate(row.transaction_date || row.createdAt) },
     { key: "cbNumber", header: "CDB No" },
     { key: "clientName", header: "Client Name" },
     { key: "mobile1", header: "Mobile 1" },
     { key: "vehicleChassisNo", header: "Vehicle / Chassis" },
-    { key: "description", header: "Description / Item" },
+    { key: "serviceType", header: "Service Type", render: (row) => row.serviceType || row.description },
+    { key: "description", header: "Description" },
     { key: "cctvDetails", header: "CCTV Details / Model" },
     { key: "cctvSerialNo", header: "Serial No" },
     { key: "model", header: "Model" },
@@ -490,6 +549,29 @@ const ExecutivePanelPage = () => {
 
             <div className="mt-6 grid gap-4 md:grid-cols-2">
               <div>
+                <label className="label">Transaction Date *</label>
+                <input
+                  className="field"
+                  name="transaction_date"
+                  type="date"
+                  min={minBackdateValue()}
+                  max={todayInputValue()}
+                  value={incomeForm.transaction_date}
+                  onChange={handleIncomeChange}
+                  required
+                />
+              </div>
+              <div>
+                <label className="label">Payment Date</label>
+                <input
+                  className="field"
+                  name="paymentDate"
+                  type="date"
+                  value={incomeForm.paymentDate}
+                  onChange={handleIncomeChange}
+                />
+              </div>
+              <div className="md:col-span-2">
                 <label className="label">Client Name / ID *</label>
                 <input className="field" name="clientName" value={incomeForm.clientName} onChange={handleIncomeChange} required />
               </div>
@@ -513,27 +595,36 @@ const ExecutivePanelPage = () => {
                 <label className="label">District</label>
                 <input className="field" name="district" value={incomeForm.district} onChange={handleIncomeChange} />
               </div>
-              {incomeForm.description !== "CCTV Material" ? (
+              {incomeForm.serviceType !== "CCTV Installation" ? (
                 <div>
                   <label className="label">Vehicle / Chassis No</label>
                   <input className="field" name="vehicleChassisNo" value={incomeForm.vehicleChassisNo} onChange={handleIncomeChange} />
                 </div>
               ) : null}
               <div className="md:col-span-2">
-                <label className="label">Description / Item *</label>
-                <select className="field" name="description" value={incomeForm.description} onChange={handleIncomeChange} required>
+                <label className="label">Service Type *</label>
+                <select className="field" name="serviceType" value={incomeForm.serviceType} onChange={handleIncomeChange} required>
                   <option value="">Select...</option>
                   <option value="GPS Installation">GPS Installation</option>
                   <option value="VLTD Installation">VLTD Installation</option>
                   <option value="GPS Renewal">GPS Renewal</option>
                   <option value="VLTD Renewal">VLTD Renewal</option>
                   <option value="CCTV Installation">CCTV Installation</option>
-                  <option value="CCTV Material">CCTV Material</option>
                   <option value="Renewal with Service">Renewal with Service</option>
                   <option value="Replacement and Service">Replacement and Service</option>
                 </select>
               </div>
-              {incomeForm.description === "CCTV Material" ? (
+              <div className="md:col-span-2">
+                <label className="label">Description</label>
+                <input
+                  className="field"
+                  name="description"
+                  value={incomeForm.description}
+                  onChange={handleIncomeChange}
+                  placeholder="Enter description manually (optional)"
+                />
+              </div>
+              {incomeForm.serviceType === "CCTV Installation" ? (
                 <>
                   <div>
                     <label className="label">CCTV Details / Model *</label>
@@ -543,17 +634,6 @@ const ExecutivePanelPage = () => {
                       value={incomeForm.cctvDetails}
                       onChange={handleIncomeChange}
                       placeholder="CCTV model / details"
-                      required
-                    />
-                  </div>
-                  <div>
-                    <label className="label">Serial No *</label>
-                    <input
-                      className="field"
-                      name="cctvSerialNo"
-                      value={incomeForm.cctvSerialNo}
-                      onChange={handleIncomeChange}
-                      placeholder="Serial number"
                       required
                     />
                   </div>
@@ -738,7 +818,20 @@ const ExecutivePanelPage = () => {
               <p className="text-xs font-bold uppercase tracking-[0.22em] text-muted">Arshi Enterprises - Records</p>
               <h3 className="mt-2 text-2xl font-bold text-ink">Income records</h3>
             </div>
-            <p className="text-sm text-muted">{incomes.length} rows</p>
+            <div className="flex flex-col gap-2 sm:items-end">
+              <label className="label">Select Month</label>
+              <input
+                className="field w-full sm:w-48"
+                type="month"
+                value={selectedMonth}
+                onChange={async (event) => {
+                  const month = event.target.value;
+                  setSelectedMonth(month);
+                  await loadRecords(month);
+                }}
+              />
+              <p className="text-sm text-muted">{incomes.length} rows</p>
+            </div>
           </div>
           <DataTable columns={incomeColumns} rows={incomes} emptyMessage="No income entries yet." />
         </div>
@@ -780,6 +873,29 @@ const ExecutivePanelPage = () => {
               {editing.type === "income" ? (
                 <div className="grid gap-4 md:grid-cols-2">
                   <div>
+                    <label className="label">Transaction Date *</label>
+                    <input
+                      className="field"
+                      name="transaction_date"
+                      type="date"
+                      min={minBackdateValue()}
+                      max={todayInputValue()}
+                      value={(editing.data.transaction_date || editing.data.createdAt || "").slice(0, 10)}
+                      onChange={handleEditChange}
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label className="label">Payment Date</label>
+                    <input
+                      className="field"
+                      name="paymentDate"
+                      type="date"
+                      value={editing.data.paymentDate || ""}
+                      onChange={handleEditChange}
+                    />
+                  </div>
+                  <div className="md:col-span-2">
                     <label className="label">Client Name / ID *</label>
                     <input className="field" name="clientName" value={editing.data.clientName || ""} onChange={handleEditChange} required />
                   </div>
@@ -803,27 +919,30 @@ const ExecutivePanelPage = () => {
                     <label className="label">District</label>
                     <input className="field" name="district" value={editing.data.district || ""} onChange={handleEditChange} />
                   </div>
-                  {editing.data.description !== "CCTV Material" ? (
+                  {editing.data.serviceType !== "CCTV Installation" ? (
                     <div>
                       <label className="label">Vehicle / Chassis No</label>
                       <input className="field" name="vehicleChassisNo" value={editing.data.vehicleChassisNo || ""} onChange={handleEditChange} />
                     </div>
                   ) : null}
                   <div className="md:col-span-2">
-                    <label className="label">Description / Item *</label>
-                    <select className="field" name="description" value={editing.data.description || ""} onChange={handleEditChange} required>
+                    <label className="label">Service Type *</label>
+                    <select className="field" name="serviceType" value={editing.data.serviceType || editing.data.description || ""} onChange={handleEditChange} required>
                       <option value="">Select...</option>
                       <option value="GPS Installation">GPS Installation</option>
                       <option value="VLTD Installation">VLTD Installation</option>
                       <option value="GPS Renewal">GPS Renewal</option>
                       <option value="VLTD Renewal">VLTD Renewal</option>
                       <option value="CCTV Installation">CCTV Installation</option>
-                      <option value="CCTV Material">CCTV Material</option>
                       <option value="Renewal with Service">Renewal with Service</option>
                       <option value="Replacement and Service">Replacement and Service</option>
                     </select>
                   </div>
-                  {editing.data.description === "CCTV Material" ? (
+                  <div className="md:col-span-2">
+                    <label className="label">Description</label>
+                    <input className="field" name="description" value={editing.data.description || ""} onChange={handleEditChange} placeholder="Enter description manually (optional)" />
+                  </div>
+                  {editing.data.serviceType === "CCTV Installation" ? (
                     <>
                       <div>
                         <label className="label">CCTV Details / Model *</label>
@@ -833,17 +952,6 @@ const ExecutivePanelPage = () => {
                           value={editing.data.cctvDetails || ""}
                           onChange={handleEditChange}
                           placeholder="CCTV model / details"
-                          required
-                        />
-                      </div>
-                      <div>
-                        <label className="label">Serial No *</label>
-                        <input
-                          className="field"
-                          name="cctvSerialNo"
-                          value={editing.data.cctvSerialNo || ""}
-                          onChange={handleEditChange}
-                          placeholder="Serial number"
                           required
                         />
                       </div>

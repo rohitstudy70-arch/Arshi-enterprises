@@ -55,7 +55,11 @@ export const downloadIncomeExcelReport = async (period = "monthly", options = {}
     filename = "income-all.xlsx";
   }
 
-  path += buildQueryString({ userId: options.userId });
+  path += buildQueryString({
+    userId: options.userId,
+    month: options.month,
+    serviceType: options.serviceType
+  });
 
   const response = await api.get(path, { responseType: "blob" });
   const blob = response.data;
@@ -92,6 +96,76 @@ export const downloadExpenseExcelReport = async (period = "monthly", options = {
   const blob = response.data;
   const disposition = response.headers["content-disposition"];
   const finalName = getFilenameFromResponse({ headers: { get: () => disposition } }, filename);
+  saveBlob(blob, finalName);
+};
+
+// LEDGER (Transaction-based) EXCEL REPORTS
+export const downloadLedgerExcelReport = async (period = "monthly", options = {}) => {
+  let path = "reports/ledger/monthly/excel";
+  let filename = "ledger-monthly.xlsx";
+
+  if (period === "daily") {
+    path = "reports/ledger/daily/excel";
+    filename = "ledger-daily.xlsx";
+  } else if (period === "weekly") {
+    path = "reports/ledger/weekly/excel";
+    filename = "ledger-weekly.xlsx";
+  } else if (period === "monthly") {
+    path = "reports/ledger/monthly/excel";
+    filename = "ledger-monthly.xlsx";
+  } else if (period === "yearly") {
+    path = "reports/ledger/yearly/excel";
+    filename = "ledger-yearly.xlsx";
+  } else if (period === "all") {
+    path = "reports/ledger/all/excel";
+    filename = "ledger-all.xlsx";
+  }
+
+  path += buildQueryString({ userId: options.userId });
+
+  const response = await api.get(path, { responseType: "blob" });
+  const blob = response.data;
+  const disposition = response.headers["content-disposition"];
+  const finalName = getFilenameFromResponse({ headers: { get: () => disposition } }, filename);
+  saveBlob(blob, finalName);
+};
+
+// DUE & ITEM TRACKING REPORTS
+export const downloadCustomerLedgerExcel = async (cdbId) => {
+  const response = await api.get(`reports/due/customer-ledger/excel${buildQueryString({ cdbId })}`, {
+    responseType: "blob"
+  });
+  const blob = response.data;
+  const disposition = response.headers["content-disposition"];
+  const finalName = getFilenameFromResponse(
+    { headers: { get: () => disposition } },
+    `ledger-${cdbId}.xlsx`
+  );
+  saveBlob(blob, finalName);
+};
+
+export const downloadDueSummaryExcel = async () => {
+  const response = await api.get("reports/due/summary/excel", { responseType: "blob" });
+  const blob = response.data;
+  const disposition = response.headers["content-disposition"];
+  const finalName = getFilenameFromResponse(
+    { headers: { get: () => disposition } },
+    "due-summary.xlsx"
+  );
+  saveBlob(blob, finalName);
+};
+
+export const downloadImeiTrackingExcel = async (search = "") => {
+  const response = await api.get(
+    `reports/due/imei-tracking/excel${buildQueryString({ search })}`,
+    { responseType: "blob" }
+  );
+  const blob = response.data;
+  const disposition = response.headers["content-disposition"];
+  const finalName = getFilenameFromResponse(
+    { headers: { get: () => disposition } },
+    `imei-tracking${search ? "-" + search : ""}.xlsx`
+  );
   saveBlob(blob, finalName);
 };
 

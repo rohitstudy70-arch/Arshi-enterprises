@@ -17,9 +17,22 @@ const incomeSchema = new mongoose.Schema(
       required: true,
       trim: true
     },
+    transaction_date: {
+      type: Date,
+      required: true,
+      default: Date.now
+    },
+    paymentDate: {
+      type: Date,
+      default: null
+    },
+    serviceType: {
+      type: String,
+      trim: true,
+      default: ""
+    },
     description: {
       type: String,
-      required: true,
       trim: true
     },
     reference: {
@@ -65,7 +78,7 @@ const incomeSchema = new mongoose.Schema(
     model: {
       type: String,
       required: function () {
-        return String(this.description || "").trim() !== "CCTV Material";
+        return String(this.serviceType || this.description || "").trim() !== "CCTV Installation";
       },
       trim: true,
       default: ""
@@ -78,7 +91,7 @@ const incomeSchema = new mongoose.Schema(
     imeiLastSix: {
       type: String,
       required: function () {
-        return String(this.description || "").trim() !== "CCTV Material";
+        return String(this.serviceType || this.description || "").trim() !== "CCTV Installation";
       },
       trim: true,
       default: ""
@@ -116,6 +129,11 @@ const incomeSchema = new mongoose.Schema(
     receivedAmount: {
       type: Number,
       required: true,
+      min: 0
+    },
+    previousDuesReceived: {
+      type: Number,
+      default: 0,
       min: 0
     },
     dues: {
@@ -161,24 +179,43 @@ const incomeSchema = new mongoose.Schema(
 incomeSchema.pre("validate", function setDerivedFields(next) {
   const billAmount = Number(this.billAmount || 0);
   const receivedAmount = Number(this.receivedAmount || 0);
+  const serviceType = String(this.serviceType || this.description || "").trim();
+  const now = new Date();
+  const todayEnd = new Date(now);
+  todayEnd.setHours(23, 59, 59, 999);
+  const minDate = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+  minDate.setHours(0, 0, 0, 0);
 
   this.dues = billAmount - receivedAmount;
+  if (!serviceType) {
+    this.invalidate("serviceType", "Service Type is required");
+  } else if (!this.serviceType) {
+    this.serviceType = serviceType;
+  }
 
-  if (String(this.description || "").trim() === "CCTV Material") {
+  if (!this.transaction_date) {
+    this.transaction_date = new Date();
+  }
+
+  const transactionDate = new Date(this.transaction_date);
+  if (Number.isNaN(transactionDate.getTime())) {
+    this.invalidate("transaction_date", "Transaction date is invalid");
+  } else if (transactionDate > todayEnd) {
+    this.invalidate("transaction_date", "Transaction date cannot be in the future");
+  } else if (transactionDate < minDate && this.isNew) {
+    this.invalidate("transaction_date", "Transaction date can only be backdated to the previous month");
+  }
+
+  if (serviceType === "CCTV Installation") {
     if (!String(this.cctvDetails || "").trim()) {
-      this.invalidate("cctvDetails", "CCTV Details / Model is required for CCTV Material");
+      this.invalidate("cctvDetails", "CCTV Details / Model is required for CCTV Installation");
     }
-    if (!String(this.cctvSerialNo || "").trim()) {
-      this.invalidate("cctvSerialNo", "Serial No is required for CCTV Material");
-    }
-    // Clear vehicle-specific fields that do not apply to CCTV Material
     this.vehicleChassisNo = "";
     this.model = "";
     this.imeiLastSix = "";
     this.imeiNo = "";
     this.vtsNo = "";
   } else {
-    // Keep CCTV-specific fields blank for non-CCTV entries
     this.cctvDetails = "";
     this.cctvSerialNo = "";
   }
@@ -201,27 +238,36 @@ incomeSchema.pre("validate", function setDerivedFields(next) {
     this.bankPersonName = "";
     this.cashAmount = receivedAmount;
     this.upiAmount = 0;
+  } else if (this.paymentMode === "bank") {
+    if (!String(this.upiReferenceId || "").trim()) {
+      this.invalidate("upiReferenceId", "Reference number is required for Bank payments");
+    }
+    if (!String(this.bankPersonName || "").trim()) {
+      this.invalidate("bankPersonName", "Bank person name is required for Bank payments");
+    }
+    this.cashReceivedBy = "";
+    this.cashAmount = 0;
+    this.upiAmount = receivedAmount;
   } else if (this.paymentMode === "split") {
     const cashAmount = Number(this.cashAmount || 0);
     const upiAmount = Number(this.upiAmount || 0);
 
-    if (cashAmount <= 0) {
-      this.invalidate("cashAmount", "Cash amount must be greater than 0 for split payments");
+    if (cashAmount <= 0 && upiAmount <= 0) {
+      this.invalidate("cashAmount", "At least one of Cash or UPI amount must be greater than 0 for split payments");
     }
-    if (upiAmount <= 0) {
-      this.invalidate("upiAmount", "UPI amount must be greater than 0 for split payments");
+    // Removed strict validation: cashAmount + upiAmount = receivedAmount
+    // Now just ensure they don't exceed receivedAmount
+    if (cashAmount + upiAmount > receivedAmount + 0.009) {
+      this.invalidate("cashAmount", "Cash + UPI cannot exceed Received Amount");
     }
-    if (Math.abs((cashAmount + upiAmount) - receivedAmount) > 0.009) {
-      this.invalidate("cashAmount", "Cash + UPI must equal Received Amount");
+    if (upiAmount > 0 && !String(this.upiReferenceId || "").trim()) {
+      this.invalidate("upiReferenceId", "UPI reference ID is required when UPI amount > 0");
     }
-    if (!String(this.upiReferenceId || "").trim()) {
-      this.invalidate("upiReferenceId", "UPI reference ID is required for split payments");
+    if (upiAmount > 0 && !String(this.bankPersonName || "").trim()) {
+      this.invalidate("bankPersonName", "Bank person name is required when UPI amount > 0");
     }
-    if (!String(this.bankPersonName || "").trim()) {
-      this.invalidate("bankPersonName", "Bank person name is required for split payments");
-    }
-    if (!String(this.cashReceivedBy || "").trim()) {
-      this.invalidate("cashReceivedBy", "Cash receiver name is required for split payments");
+    if (cashAmount > 0 && !String(this.cashReceivedBy || "").trim()) {
+      this.invalidate("cashReceivedBy", "Cash receiver name is required when Cash amount > 0");
     }
   } else {
     this.upiReferenceId = "";

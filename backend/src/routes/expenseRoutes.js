@@ -12,9 +12,9 @@ const router = express.Router();
 
 router.use(protect);
 
-router.post("/", authorizeRoles("executive"), addExpense);
+router.post("/", authorizeRoles("executive", "expense-only"), addExpense);
 router.get("/", getExpenses);
-router.put("/:id", authorizeRoles("admin", "executive"), updateExpense);
-router.delete("/:id", authorizeRoles("admin", "executive"), deleteExpense);
+router.put("/:id", authorizeRoles("admin", "executive", "expense-only"), updateExpense);
+router.delete("/:id", authorizeRoles("admin", "executive", "expense-only"), deleteExpense);
 
 module.exports = router;
