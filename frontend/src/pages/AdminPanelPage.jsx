@@ -416,7 +416,20 @@ const AdminPanelPage = () => {
     { key: "billAmount", header: "Bill Amount", render: (row) => formatCurrency(row.billAmount) },
     { key: "receivedAmount", header: "Received Amount", render: (row) => formatCurrency(row.receivedAmount) },
     { key: "dues", header: "Dues", render: (row) => formatCurrency(row.dues) },
-    { key: "paymentMode", header: "Payment Mode" },
+    {
+      key: "paymentMode",
+      header: "Payment Mode",
+      render: (row) => {
+        if (row.paymentMode === "upi") return "UPI";
+        if (row.paymentMode === "split") {
+          return `Split (Cash ${formatCurrency(row.cashAmount)} + UPI ${formatCurrency(row.upiAmount)})`;
+        }
+        if (row.paymentMode === "cash") return "Cash";
+        return row.paymentMode || "-";
+      }
+    },
+    { key: "cashAmount", header: "Cash Amount", render: (row) => formatCurrency(row.cashAmount) },
+    { key: "upiAmount", header: "UPI Amount", render: (row) => formatCurrency(row.upiAmount) },
     { key: "upiReferenceId", header: "UPI / UTR Ref" },
     { key: "bankPersonName", header: "Bank Person" },
     { key: "cashReceivedBy", header: "Cash Received By" },
