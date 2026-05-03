@@ -221,10 +221,79 @@ const updateCustomerDue = async (req, res) => {
   }
 };
 
+// ================= SEARCH BY VEHICLE / CHASSIS NUMBER =================
+const searchByVehicleNumber = async (req, res) => {
+  try {
+    const { vehicleNumber } = req.query;
+
+    if (!vehicleNumber || !String(vehicleNumber).trim()) {
+      return res.status(400).json({ message: "vehicleNumber query parameter is required" });
+    }
+
+    const normalizedVehicleNumber = String(vehicleNumber).trim();
+
+    // Find all income records with this vehicle number
+    const incomes = await Income.find({
+      vehicleChassisNo: { $regex: normalizedVehicleNumber, $options: "i" }
+    })
+      .populate("userId", "username")
+      .sort({ createdAt: -1 })
+      .lean();
+
+    // Group by CDB ID and calculate dues
+    const cdbMap = {};
+    for (const income of incomes) {
+      const cdbId = String(income.cbNumber || "").trim();
+      if (!cdbId) continue;
+
+      if (!cdbMap[cdbId]) {
+        cdbMap[cdbId] = {
+          cdbId,
+          clientName: income.clientName || "Unknown",
+          vehicleChassisNo: income.vehicleChassisNo || "",
+          totalBill: 0,
+          totalPaid: 0,
+          totalDue: 0
+        };
+      }
+
+      const billAmt = Number(income.billAmount) || 0;
+      const paidAmt = Number(income.receivedAmount) || 0;
+
+      cdbMap[cdbId].totalBill += billAmt;
+      cdbMap[cdbId].totalPaid += paidAmt;
+    }
+
+    // Calculate dues
+    const customers = Object.values(cdbMap).map(c => ({
+      ...c,
+      totalDue: Math.max(0, c.totalBill - c.totalPaid)
+    }));
+
+    const grandTotalBill = customers.reduce((sum, c) => sum + c.totalBill, 0);
+    const grandTotalPaid = customers.reduce((sum, c) => sum + c.totalPaid, 0);
+    const grandTotalDue = customers.reduce((sum, c) => sum + c.totalDue, 0);
+
+    return res.status(200).json({
+      searchTerm: normalizedVehicleNumber,
+      customers,
+      totals: {
+        grandTotalBill,
+        grandTotalPaid,
+        grandTotalDue
+      }
+    });
+  } catch (error) {
+    console.error("SEARCH VEHICLE ERROR 👉", error);
+    return res.status(500).json({ message: error.message });
+  }
+};
+
 module.exports = {
   getCustomerLedger,
   getDueSummary,
   getImeiTracking,
   syncItems,
-  updateCustomerDue
+  updateCustomerDue,
+  searchByVehicleNumber
 };

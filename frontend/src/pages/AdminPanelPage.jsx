@@ -61,6 +61,9 @@ const AdminPanelPage = () => {
   // Due Dashboard
   const [dueSummaryData, setDueSummaryData] = useState(null);
   const [dueSummaryLoading, setDueSummaryLoading] = useState(false);
+  const [vehicleSearch, setVehicleSearch] = useState("");
+  const [vehicleSearchResults, setVehicleSearchResults] = useState(null);
+  const [vehicleSearchLoading, setVehicleSearchLoading] = useState(false);
 
   // IMEI Tracking
   const [imeiSearch, setImeiSearch] = useState("");
@@ -138,10 +141,26 @@ const AdminPanelPage = () => {
     try {
       const { data } = await api.get("/due/summary");
       setDueSummaryData(data);
+      setVehicleSearchResults(null);
     } catch (error) {
       console.error("Due summary load error:", error);
     } finally {
       setDueSummaryLoading(false);
+    }
+  };
+
+  // ================= SEARCH BY VEHICLE NUMBER =================
+  const searchByVehicleNumber = async (vehicleNum) => {
+    if (!vehicleNum || !String(vehicleNum).trim()) return;
+    setVehicleSearchLoading(true);
+    try {
+      const { data } = await api.get("/due/search-vehicle", { params: { vehicleNumber: vehicleNum } });
+      setVehicleSearchResults(data);
+    } catch (error) {
+      console.error("Vehicle search error:", error);
+      alert(error.response?.data?.message || "Failed to search by vehicle number");
+    } finally {
+      setVehicleSearchLoading(false);
     }
   };
 
@@ -1464,7 +1483,96 @@ const AdminPanelPage = () => {
             </div>
           </div>
 
-          {dueSummaryData ? (
+          {/* VEHICLE/CHASSIS SEARCH */}
+          <div className="mb-6 rounded-xl border border-line bg-slate-50 p-4">
+            <h4 className="mb-3 font-bold text-ink">Search by Vehicle/Chassis Number</h4>
+            <div className="flex flex-col gap-2 sm:flex-row">
+              <input
+                className="field w-full sm:flex-1"
+                placeholder="Enter vehicle or chassis number..."
+                value={vehicleSearch}
+                onChange={(e) => setVehicleSearch(e.target.value)}
+              />
+              <button
+                type="button"
+                className="button-primary text-sm"
+                onClick={() => searchByVehicleNumber(vehicleSearch)}
+                disabled={!vehicleSearch || vehicleSearchLoading}
+              >
+                {vehicleSearchLoading ? "Searching..." : "Search"}
+              </button>
+              {vehicleSearchResults && (
+                <button
+                  type="button"
+                  className="button-secondary text-sm"
+                  onClick={() => {
+                    setVehicleSearch("");
+                    setVehicleSearchResults(null);
+                  }}
+                >
+                  Clear Search
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* DISPLAY RESULTS */}
+          {vehicleSearchResults ? (
+            <>
+              <div className="mb-4">
+                <p className="mb-2 text-sm text-muted">
+                  Search results for: <span className="font-semibold text-ink">"{vehicleSearchResults.searchTerm}"</span>
+                </p>
+              </div>
+              <div className="mb-4 grid gap-4 sm:grid-cols-3">
+                <div className="rounded-xl border border-line bg-slate-50 p-4">
+                  <p className="text-xs text-muted">Grand Total Bill</p>
+                  <p className="mt-1 text-xl font-bold text-ink">{formatCurrency(vehicleSearchResults.totals?.grandTotalBill)}</p>
+                </div>
+                <div className="rounded-xl border border-line bg-slate-50 p-4">
+                  <p className="text-xs text-muted">Grand Total Paid</p>
+                  <p className="mt-1 text-xl font-bold text-ink">{formatCurrency(vehicleSearchResults.totals?.grandTotalPaid)}</p>
+                </div>
+                <div className="rounded-xl border border-line bg-slate-50 p-4">
+                  <p className="text-xs text-muted">Grand Total Due</p>
+                  <p className={`mt-1 text-xl font-bold ${vehicleSearchResults.totals?.grandTotalDue > 0 ? "text-red-600" : "text-green-600"}`}>
+                    {formatCurrency(vehicleSearchResults.totals?.grandTotalDue)}
+                  </p>
+                </div>
+              </div>
+              <DataTable
+                columns={[
+                  { key: "cdbId", header: "CDB ID" },
+                  { key: "clientName", header: "Customer" },
+                  { key: "vehicleChassisNo", header: "Vehicle / Chassis" },
+                  { key: "totalBill", header: "Total Bill", render: (row) => formatCurrency(row.totalBill) },
+                  { key: "totalPaid", header: "Total Paid", render: (row) => formatCurrency(row.totalPaid) },
+                  {
+                    key: "totalDue", header: "Due", render: (row) => (
+                      <span className={row.totalDue > 0 ? "font-semibold text-red-600" : "font-semibold text-green-600"}>
+                        {formatCurrency(row.totalDue)}
+                      </span>
+                    )
+                  },
+                  {
+                    key: "actions",
+                    header: "Actions",
+                    render: (row) => (
+                      <button
+                        type="button"
+                        className="button-primary px-3 py-2 text-xs"
+                        onClick={() => openUpdateDueModal(row.cdbId, row.totalDue, row.clientName)}
+                      >
+                        Update Due
+                      </button>
+                    )
+                  }
+                ]}
+                rows={vehicleSearchResults.customers || []}
+                emptyMessage="No customers found for this vehicle number."
+              />
+            </>
+          ) : dueSummaryData ? (
             <>
               <div className="mb-4 grid gap-4 sm:grid-cols-3">
                 <div className="rounded-xl border border-line bg-slate-50 p-4">
@@ -1577,6 +1685,19 @@ const AdminPanelPage = () => {
                     }`}>
                     {row.status}
                   </span>
+                )
+              },
+              {
+                key: "actions",
+                header: "Actions",
+                render: (row) => (
+                  <button
+                    type="button"
+                    className="button-primary px-3 py-2 text-xs"
+                    onClick={() => openUpdateDueModal(row.cdbId, row.dueAmount, row.clientName)}
+                  >
+                    Update Due
+                  </button>
                 )
               }
             ]}

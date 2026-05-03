@@ -4,7 +4,8 @@ const {
   getDueSummary,
   getImeiTracking,
   syncItems,
-  updateCustomerDue
+  updateCustomerDue,
+  searchByVehicleNumber
 } = require("../controllers/dueController");
 const { protect } = require("../middleware/authMiddleware");
 const { authorizeRoles } = require("../middleware/roleMiddleware");
@@ -13,6 +14,7 @@ const router = express.Router();
 
 router.get("/ledger", protect, authorizeRoles("admin"), getCustomerLedger);
 router.get("/summary", protect, authorizeRoles("admin"), getDueSummary);
+router.get("/search-vehicle", protect, authorizeRoles("admin"), searchByVehicleNumber);
 router.get("/items", protect, authorizeRoles("admin"), getImeiTracking);
 router.post("/sync", protect, authorizeRoles("admin"), syncItems);
 router.put("/update", protect, authorizeRoles("admin"), updateCustomerDue);

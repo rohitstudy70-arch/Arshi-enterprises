@@ -136,10 +136,9 @@ const savePayment = async (req, res) => {
 
     if (income) {
       const currentBillAmount = Number(income.billAmount) || 0;
-      const currentPreviousDuesReceived = Number(income.previousDuesReceived) || 0;
 
-      // Calculate new received amount: Bill - Previous Dues Received - New Due Amount
-      const newReceivedAmount = currentBillAmount - currentPreviousDuesReceived - newDue;
+      // Calculate new received amount: Bill Amount - Remaining Due
+      const newReceivedAmount = currentBillAmount - newDue;
 
       income.receivedAmount = newReceivedAmount;
 
