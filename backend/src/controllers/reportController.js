@@ -244,7 +244,8 @@ const generateIncomeExcelByPeriod = async (req, res, days, filename) => {
         'UPI / UTR Ref',
         'Bank Person',
         'Cash Received By',
-        'Executive'
+        'Executive',
+        'Remarks'
       ];
       headers.forEach((h, idx) => {
         const cell = sheet.getCell(1, idx + 1);
@@ -252,7 +253,7 @@ const generateIncomeExcelByPeriod = async (req, res, days, filename) => {
         cell.font = { bold: true };
         cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF4F4F4' } };
       });
-      [14, 14, 12, 28, 16, 20, 22, 30, 22, 18, 18, 16, 14, 18, 20, 8, 14, 16, 20, 14, 16, 14, 14, 20, 18, 20, 16].forEach((width, idx) => {
+      [14, 14, 12, 28, 16, 20, 22, 30, 22, 18, 18, 16, 14, 18, 20, 8, 14, 16, 20, 14, 16, 14, 14, 20, 18, 20, 16, 30].forEach((width, idx) => {
         sheet.getColumn(idx + 1).width = width;
       });
       sheet.getColumn(1).numFmt = 'dd/mm/yyyy';
@@ -320,6 +321,7 @@ const generateIncomeExcelByPeriod = async (req, res, days, filename) => {
         sheet.getCell(row, 25).value = r.bankPersonName || '';
         sheet.getCell(row, 26).value = r.cashReceivedBy || '';
         sheet.getCell(row, 27).value = r.userId?.username || '';
+        sheet.getCell(row, 28).value = r.remarks || '';
       });
 
       const addSummaryBlock = (targetSheet, startCol, title, color, rows) => {
@@ -502,7 +504,7 @@ const generateIncomeExcelByPeriod = async (req, res, days, filename) => {
       'Model', 'IMEI Last 6', 'VTS No', 'Qty',
       'Bill Amount', 'Received Amount', 'Previous Dues Received', 'Dues', 'Payment Mode',
       'Cash Amount', 'UPI Amount',
-      'UPI / UTR Ref', 'Bank Person', 'Cash Received By', 'Technician', 'Executive', 'CCTV Details / Model', 'Serial No', 'Reference (Given By)'
+      'UPI / UTR Ref', 'Bank Person', 'Cash Received By', 'Technician', 'Executive', 'CCTV Details / Model', 'Serial No', 'Reference (Given By)', 'Remarks'
     ];
     headers.forEach((h, idx) => {
       const cell = sheet.getCell(1, 1 + idx);
@@ -622,6 +624,7 @@ const generateIncomeExcelByPeriod = async (req, res, days, filename) => {
       sheet.getCell(rowNum, 28).value = safeStr(r.cctvDetails);
       sheet.getCell(rowNum, 29).value = safeStr(r.cctvSerialNo);
       sheet.getCell(rowNum, 30).value = safeStrOrDash(r.reference);
+      sheet.getCell(rowNum, 31).value = safeStr(r.remarks);
     });
 
     // Debug: log first record's UPI fields to verify mapping

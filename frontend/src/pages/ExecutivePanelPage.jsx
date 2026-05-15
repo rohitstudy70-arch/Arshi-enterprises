@@ -46,7 +46,8 @@ const initialIncomeForm = {
   cashAmount: "",
   upiAmount: "",
   cctvDetails: "",
-  cctvSerialNo: ""
+  cctvSerialNo: "",
+  remarks: ""
 };
 
 const initialExpenseForm = {
@@ -145,10 +146,6 @@ const ExecutivePanelPage = () => {
         return {
           ...current,
           serviceType: value,
-          vehicleChassisNo: "",
-          model: "",
-          imeiNo: "",
-          imeiLastSix: "",
           vtsNo: "",
           cctvDetails: ""
         };
@@ -249,6 +246,7 @@ const ExecutivePanelPage = () => {
       return;
     }
 
+    console.log("[INCOME SUBMIT PAYLOAD]", incomeForm);
     setSubmittingIncome(true);
     try {
       await api.post("/incomes", {
@@ -392,7 +390,8 @@ const ExecutivePanelPage = () => {
           cashAmount: data.paymentMode === "split" ? Number(data.cashAmount || 0) : 0,
           upiAmount: data.paymentMode === "split" ? Number(data.upiAmount || 0) : 0,
           cctvDetails: data.serviceType === "CCTV Installation" ? (data.cctvDetails || "") : "",
-          cctvSerialNo: ""
+          cctvSerialNo: data.serviceType === "CCTV Installation" ? (data.cctvSerialNo || "") : "",
+          remarks: data.remarks || ""
         });
       } else {
         await api.put(`/expenses/${data._id}`, {
@@ -463,6 +462,7 @@ const ExecutivePanelPage = () => {
     { key: "upiReferenceId", header: "UPI Reference" },
     { key: "bankPersonName", header: "Bank Person" },
     { key: "cashReceivedBy", header: "Cash Received By" },
+    { key: "remarks", header: "Remarks" },
     { key: "actions", header: "Actions", render: actionsCell("income") }
   ];
 
@@ -541,12 +541,10 @@ const ExecutivePanelPage = () => {
                 <label className="label">District</label>
                 <input className="field" name="district" value={incomeForm.district} onChange={handleIncomeChange} />
               </div>
-              {incomeForm.serviceType !== "CCTV Installation" ? (
-                <div>
-                  <label className="label">Vehicle / Chassis No</label>
-                  <input className="field" name="vehicleChassisNo" value={incomeForm.vehicleChassisNo} onChange={handleIncomeChange} />
-                </div>
-              ) : null}
+              <div>
+                <label className="label">Vehicle / Chassis No</label>
+                <input className="field" name="vehicleChassisNo" value={incomeForm.vehicleChassisNo} onChange={handleIncomeChange} />
+              </div>
               <div className="md:col-span-2">
                 <label className="label">Service Type *</label>
                 <select className="field" name="serviceType" value={incomeForm.serviceType} onChange={handleIncomeChange} required>
@@ -581,6 +579,16 @@ const ExecutivePanelPage = () => {
                       onChange={handleIncomeChange}
                       placeholder="CCTV model / details"
                       required
+                    />
+                  </div>
+                  <div>
+                    <label className="label">Serial No</label>
+                    <input
+                      className="field"
+                      name="cctvSerialNo"
+                      value={incomeForm.cctvSerialNo}
+                      onChange={handleIncomeChange}
+                      placeholder="CCTV serial number"
                     />
                   </div>
                 </>
@@ -707,6 +715,16 @@ const ExecutivePanelPage = () => {
                   </div>
                 </>
               ) : null}
+              <div className="md:col-span-2">
+                <label className="label">Remarks</label>
+                <textarea
+                  className="field min-h-20"
+                  name="remarks"
+                  value={incomeForm.remarks}
+                  onChange={handleIncomeChange}
+                  placeholder="Additional notes or remarks"
+                />
+              </div>
             </div>
 
               <div className="flex justify-end mt-6">

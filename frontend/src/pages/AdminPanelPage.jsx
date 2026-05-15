@@ -621,7 +621,11 @@ const AdminPanelPage = () => {
         previousDuesReceived: record.previousDuesReceived || 0,
         paymentMode: record.paymentMode,
         upiReferenceId: record.upiReferenceId || "",
-        cctvDetails: record.cctvDetails || ""
+        cashAmount: record.cashAmount || 0,
+        upiAmount: record.upiAmount || 0,
+        cctvDetails: record.cctvDetails || "",
+        cctvSerialNo: record.cctvSerialNo || "",
+        remarks: record.remarks || ""
       });
       return;
     }
@@ -646,12 +650,9 @@ const AdminPanelPage = () => {
       [name]: value,
       ...(name === "serviceType"
         ? {
-          vehicleChassisNo: "",
-          model: "",
-          imeiNo: "",
-          imeiLastSix: "",
           vtsNo: "",
-          cctvDetails: ""
+          cctvDetails: "",
+          cctvSerialNo: ""
         }
         : {})
     }));
@@ -689,8 +690,11 @@ const AdminPanelPage = () => {
           previousDuesReceived: Number(editForm.previousDuesReceived || 0),
           paymentMode: editForm.paymentMode,
           upiReferenceId: editForm.upiReferenceId,
+          cashAmount: Number(editForm.cashAmount || 0),
+          upiAmount: Number(editForm.upiAmount || 0),
           cctvDetails: editForm.serviceType === "CCTV Installation" ? editForm.cctvDetails : "",
-          cctvSerialNo: ""
+          cctvSerialNo: editForm.serviceType === "CCTV Installation" ? editForm.cctvSerialNo : "",
+          remarks: editForm.remarks || ""
         });
       } else {
           if (editingRecord.record._id) {
@@ -846,6 +850,7 @@ const AdminPanelPage = () => {
     { key: "upiReferenceId", header: "UPI / UTR Ref" },
     { key: "bankPersonName", header: "Bank Person" },
     { key: "cashReceivedBy", header: "Cash Received By" },
+    { key: "remarks", header: "Remarks" },
     {
       key: "user",
       header: "Executive",
@@ -1850,17 +1855,15 @@ const AdminPanelPage = () => {
                     onChange={handleEditChange}
                   />
                 </div>
-                {editForm.serviceType !== "CCTV Installation" ? (
-                  <div>
-                    <label className="label">Vehicle / Chassis No</label>
-                    <input
-                      className="field"
-                      name="vehicleChassisNo"
-                      value={editForm.vehicleChassisNo || ""}
-                      onChange={handleEditChange}
-                    />
-                  </div>
-                ) : null}
+                <div>
+                  <label className="label">Vehicle / Chassis No</label>
+                  <input
+                    className="field"
+                    name="vehicleChassisNo"
+                    value={editForm.vehicleChassisNo || ""}
+                    onChange={handleEditChange}
+                  />
+                </div>
                 <div className="md:col-span-2">
                   <label className="label">Service Type</label>
                   <select
@@ -1891,10 +1894,16 @@ const AdminPanelPage = () => {
                   />
                 </div>
                 {editForm.serviceType === "CCTV Installation" ? (
-                  <div>
-                    <label className="label">CCTV Details / Model</label>
-                    <input className="field" name="cctvDetails" value={editForm.cctvDetails || ""} onChange={handleEditChange} required />
-                  </div>
+                  <>
+                    <div>
+                      <label className="label">CCTV Details / Model</label>
+                      <input className="field" name="cctvDetails" value={editForm.cctvDetails || ""} onChange={handleEditChange} required />
+                    </div>
+                    <div>
+                      <label className="label">Serial No</label>
+                      <input className="field" name="cctvSerialNo" value={editForm.cctvSerialNo || ""} onChange={handleEditChange} />
+                    </div>
+                  </>
                 ) : (
                   <>
                     <div>
@@ -1999,8 +2008,37 @@ const AdminPanelPage = () => {
                     <option value="cash">Cash</option>
                     <option value="upi">UPI</option>
                     <option value="bank">Bank</option>
+                    <option value="split">Split</option>
                   </select>
                 </div>
+                {editForm.paymentMode === "split" && (
+                  <>
+                    <div>
+                      <label className="label">Cash Amount</label>
+                      <input
+                        className="field"
+                        name="cashAmount"
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        value={editForm.cashAmount || ""}
+                        onChange={handleEditChange}
+                      />
+                    </div>
+                    <div>
+                      <label className="label">UPI Amount</label>
+                      <input
+                        className="field"
+                        name="upiAmount"
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        value={editForm.upiAmount || ""}
+                        onChange={handleEditChange}
+                      />
+                    </div>
+                  </>
+                )}
                 <div>
                   <label className="label">UPI Reference (if applicable)</label>
                   <input
@@ -2009,6 +2047,16 @@ const AdminPanelPage = () => {
                     value={editForm.upiReferenceId || ""}
                     onChange={handleEditChange}
                     placeholder="Enter UPI reference or transaction ID"
+                  />
+                </div>
+                <div className="md:col-span-2">
+                  <label className="label">Remarks</label>
+                  <textarea
+                    className="field min-h-20"
+                    name="remarks"
+                    value={editForm.remarks || ""}
+                    onChange={handleEditChange}
+                    placeholder="Additional notes or remarks"
                   />
                 </div>
               </>

@@ -53,7 +53,8 @@ const addIncome = async (req, res) => {
       cashAmount,
       upiAmount,
       cctvDetails,
-      cctvSerialNo
+      cctvSerialNo,
+      remarks
     } = req.body;
 
     // Only admin can submit previous dues received
@@ -95,7 +96,8 @@ const addIncome = async (req, res) => {
       cashAmount,
       upiAmount,
       cctvDetails,
-      cctvSerialNo
+      cctvSerialNo,
+      remarks
     });
 
     // Recalculate item-level dues for this customer
@@ -157,7 +159,8 @@ const updateIncome = async (req, res) => {
       "cashAmount",
       "upiAmount",
       "cctvDetails",
-      "cctvSerialNo"
+      "cctvSerialNo",
+      "remarks"
     ];
 
     const updates = Object.fromEntries(

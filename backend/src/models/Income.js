@@ -169,6 +169,11 @@ const incomeSchema = new mongoose.Schema(
       type: Number,
       default: 0,
       min: 0
+    },
+    remarks: {
+      type: String,
+      trim: true,
+      default: ""
     }
   },
   {
@@ -210,14 +215,12 @@ incomeSchema.pre("validate", function setDerivedFields(next) {
     if (!String(this.cctvDetails || "").trim()) {
       this.invalidate("cctvDetails", "CCTV Details / Model is required for CCTV Installation");
     }
-    this.vehicleChassisNo = "";
     this.model = "";
     this.imeiLastSix = "";
     this.imeiNo = "";
     this.vtsNo = "";
   } else {
     this.cctvDetails = "";
-    this.cctvSerialNo = "";
   }
 
   if (this.paymentMode === "upi") {
