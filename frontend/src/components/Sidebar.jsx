@@ -1,5 +1,6 @@
 import { NavLink } from "react-router-dom";
 
+
 const Sidebar = ({ user, open, onClose, onLogout }) => {
   const links = [
     user?.role === "executive" ? { label: "Executive Panel", to: "/executive" } : null,

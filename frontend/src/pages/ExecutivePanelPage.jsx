@@ -239,10 +239,9 @@ const ExecutivePanelPage = () => {
     return null;
   };
 
-  const handleCombinedSubmit = async (event) => {
+  const handleIncomeSubmit = async (event) => {
     event.preventDefault();
     setIncomeFeedback(null);
-    setExpenseFeedback(null);
 
     const validationError = validateIncome(incomeForm);
     if (validationError) {
@@ -250,22 +249,7 @@ const ExecutivePanelPage = () => {
       return;
     }
 
-    const expenseEntries = expenseCategoryFields
-      .map((f) => ({
-        category: f.category,
-        label: f.label,
-        amount: Number(expenseForm[f.key])
-      }))
-      .filter((e) => !isNaN(e.amount) && e.amount > 0);
-
-    const hasExpense = expenseEntries.length > 0;
-
     setSubmittingIncome(true);
-    if (hasExpense) setSubmittingExpense(true);
-
-    let incomeOk = false;
-    let expenseOk = !hasExpense; // if no expense, treat as success-skipped
-
     try {
       await api.post("/incomes", {
         ...incomeForm,
@@ -281,52 +265,14 @@ const ExecutivePanelPage = () => {
         cashAmount: incomeForm.paymentMode === "split" ? Number(incomeForm.cashAmount || 0) : 0,
         upiAmount: incomeForm.paymentMode === "split" ? Number(incomeForm.upiAmount || 0) : 0
       });
-      incomeOk = true;
       setIncomeForm(initialIncomeForm);
       setIncomeFeedback({ type: "success", message: "Income saved successfully." });
+      await loadRecords();
     } catch (error) {
       console.error("[INCOME POST ERROR]", error.response?.status, error.response?.data);
-      setIncomeFeedback({
-        type: "error",
-        message: error.response?.data?.message || "Unable to save income."
-      });
+      setIncomeFeedback({ type: "error", message: error.response?.data?.message || "Unable to save income." });
     } finally {
       setSubmittingIncome(false);
-    }
-
-    if (hasExpense) {
-      const failed = [];
-      let savedCount = 0;
-      for (const entry of expenseEntries) {
-        try {
-          await api.post("/expenses", {
-            category: entry.category,
-            amount: entry.amount,
-            notes: expenseForm.notes
-          });
-          savedCount += 1;
-        } catch (error) {
-          failed.push(`${entry.label} (${error.response?.data?.message || "failed"})`);
-        }
-      }
-      if (failed.length === 0) {
-        expenseOk = true;
-        setExpenseForm(initialExpenseForm);
-        setExpenseFeedback({
-          type: "success",
-          message: `${savedCount} expense ${savedCount === 1 ? "entry" : "entries"} saved.`
-        });
-      } else {
-        setExpenseFeedback({
-          type: "error",
-          message: `Failed to save: ${failed.join(", ")}`
-        });
-      }
-      setSubmittingExpense(false);
-    }
-
-    if (incomeOk || expenseOk) {
-      await loadRecords();
     }
   };
 
@@ -533,9 +479,9 @@ const ExecutivePanelPage = () => {
 
   return (
     <div className="space-y-6">
-      <form onSubmit={handleCombinedSubmit} className="space-y-6">
+      <div className="space-y-6">
         <section className="grid gap-6 xl:grid-cols-2">
-          <div className="panel p-6">
+          <form onSubmit={handleIncomeSubmit} className="panel p-6">
             <div>
               <p className="text-xs font-bold uppercase tracking-[0.22em] text-muted">Income Entry</p>
               <h3 className="mt-2 text-2xl font-bold text-ink">Add income record</h3>
@@ -763,9 +709,14 @@ const ExecutivePanelPage = () => {
               ) : null}
             </div>
 
-          </div>
+              <div className="flex justify-end mt-6">
+                <button type="submit" className="button-primary" disabled={submittingIncome}>
+                  {submittingIncome ? "Saving..." : "Add income record"}
+                </button>
+              </div>
+            </form>
 
-          <div className="panel p-6">
+          <form onSubmit={handleExpenseSubmit} className="panel p-6">
             <div>
               <p className="text-xs font-bold uppercase tracking-[0.22em] text-muted">Expense Entry (Optional)</p>
               <h3 className="mt-2 text-2xl font-bold text-ink">Add expense</h3>
@@ -801,15 +752,13 @@ const ExecutivePanelPage = () => {
               </div>
             </div>
 
-          </div>
+              <div className="flex justify-end mt-6">
+                <button type="submit" className="button-primary" disabled={submittingExpense}>
+                  {submittingExpense ? "Saving..." : "Add expense"}
+                </button>
+              </div>
+            </form>
         </section>
-
-        <div className="flex justify-end">
-          <button type="submit" className="button-primary" disabled={submittingIncome || submittingExpense}>
-            {submittingIncome || submittingExpense ? "Saving..." : "Save records"}
-          </button>
-        </div>
-      </form>
 
       <section className="space-y-6">
         <div className="panel p-6">
@@ -1089,6 +1038,7 @@ const ExecutivePanelPage = () => {
         </div>
       ) : null}
     </div>
+  </div>
   );
 };
 

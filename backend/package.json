@@ -1,5 +1,5 @@
 {
-  "name": "tailwind-auth-backend",
+  "name": "arshi-enterprises-backend",
   "version": "1.0.0",
   "description": "Node.js authentication backend with Express, MongoDB, bcrypt, and JWT",
   "main": "server.js",

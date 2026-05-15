@@ -10,6 +10,7 @@ const dashboardRoutes = require("./src/routes/dashboardRoutes");
 const reportRoutes = require("./src/routes/reportRoutes");
 const dueRoutes = require("./src/routes/dueRoutes");
 const paymentRoutes = require("./src/routes/paymentRoutes");
+const expenseTagRoutes = require("./src/routes/expenseTagRoutes");
 const ensureAdminUser = require("./src/utils/ensureAdminUser");
 
 const app = express();
@@ -41,6 +42,7 @@ app.get("/", (req, res) => {
 app.use("/api/auth", authRoutes);
 app.use("/api/incomes", incomeRoutes);
 app.use("/api/expenses", expenseRoutes);
+app.use("/api/expense-tags", expenseTagRoutes);
 app.use("/api/dashboard", dashboardRoutes);
 app.use("/api/reports", reportRoutes);
 app.use("/api/due", dueRoutes);

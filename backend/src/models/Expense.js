@@ -14,8 +14,14 @@ const expenseSchema = new mongoose.Schema(
     },
     amount: {
       type: Number,
-      required: true,
-      min: 0
+      required: false,
+      min: 0,
+      default: 0
+    },
+    expenseId: {
+      type: String,
+      trim: true,
+      default: ""
     },
     notes: {
       type: String,

@@ -26,6 +26,7 @@ const AdminPanelPage = () => {
   const [createUserForm, setCreateUserForm] = useState(initialUserForm);
   const [createUserMessage, setCreateUserMessage] = useState("");
   const [creatingUser, setCreatingUser] = useState(false);
+  
   const [historyMonths, setHistoryMonths] = useState("12");
   const [filters, setFilters] = useState({
     userId: "",
@@ -96,6 +97,8 @@ const AdminPanelPage = () => {
     const { data } = await api.get("/auth/users");
     setUsers(data.users);
   };
+
+  
 
   const loadRecords = async (params = queryParams) => {
     const [{ data: incomeData }, { data: expenseData }] = await Promise.all([
@@ -300,8 +303,8 @@ const AdminPanelPage = () => {
 
     const bootstrap = async () => {
       try {
-        await Promise.all([loadUsers(), loadRecords({})]);
-      } finally {
+          await Promise.all([loadUsers(), loadRecords({})]);
+        } finally {
         if (mounted) {
           setRecordsLoading(false);
         }
@@ -392,6 +395,29 @@ const AdminPanelPage = () => {
       [event.target.name]: event.target.value
     }));
   };
+
+  const handleCreateTagChange = (e) => {
+    const { name, value } = e.target;
+    setCreateTagForm((c) => ({ ...c, [name]: value }));
+  };
+
+  const handleCreateTag = async (e) => {
+    e.preventDefault();
+    setCreatingTag(true);
+    setCreateTagMessage("");
+
+    try {
+      await api.post("/expense-tags", createTagForm);
+      setCreateTagForm({ code: "", name: "" });
+      setCreateTagMessage("Tag created");
+      await loadExpenseTags();
+    } catch (error) {
+      setCreateTagMessage(error.response?.data?.message || "Failed to create tag");
+    } finally {
+      setCreatingTag(false);
+    }
+  };
+  
 
   const handleCreateUser = async (event) => {
     event.preventDefault();
@@ -601,9 +627,10 @@ const AdminPanelPage = () => {
     }
 
     setEditForm({
-      category: record.category,
-      amount: record.amount,
-      notes: record.notes
+      category: record.category || "petrol",
+      amount: record.amount || "",
+      notes: record.notes || "",
+      date: record.date || new Date().toISOString().slice(0, 10)
     });
   };
 
@@ -666,11 +693,22 @@ const AdminPanelPage = () => {
           cctvSerialNo: ""
         });
       } else {
-        await api.put(`/expenses/${editingRecord.record._id}`, {
-          category: editForm.category,
-          amount: Number(editForm.amount),
-          notes: editForm.notes
-        });
+          if (editingRecord.record._id) {
+          // Update existing expense
+          await api.put(`/expenses/${editingRecord.record._id}`, {
+            category: editForm.category,
+            amount: Number(editForm.amount) || 0,
+            notes: editForm.notes
+          });
+        } else {
+          // Create new expense
+          await api.post("/expenses", {
+            category: editForm.category,
+            amount: Number(editForm.amount) || 0,
+            notes: editForm.notes,
+            date: editForm.date
+          });
+        }
       }
 
       await Promise.all([loadRecords(), loadDashboard(historyMonths)]);
@@ -912,6 +950,7 @@ const AdminPanelPage = () => {
                 <option value="expense-only">Expense Only</option>
               </select>
             </div>
+            
           </div>
 
           {createUserMessage ? (
@@ -921,6 +960,7 @@ const AdminPanelPage = () => {
           ) : null}
         </form>
 
+        
         <div className="panel p-4 sm:p-6">
           <div className="mb-5 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div className="min-w-0">
@@ -1191,7 +1231,16 @@ const AdminPanelPage = () => {
                 <p className="text-xs font-bold uppercase tracking-[0.22em] text-muted">Expense Ledger</p>
                 <h3 className="mt-2 text-xl font-bold text-ink sm:text-2xl">All expense records</h3>
               </div>
-              {recordsLoading ? <p className="text-sm text-muted">Refreshing...</p> : null}
+              <div className="flex items-center gap-2">
+                {recordsLoading ? <p className="text-sm text-muted">Refreshing...</p> : null}
+                <button
+                  type="button"
+                  className="button-primary text-sm"
+                  onClick={() => openEditor("expense", { _id: null, category: "petrol", amount: "", notes: "", date: new Date().toISOString().slice(0, 10) })}
+                >
+                  + Add Expense
+                </button>
+              </div>
             </div>
             <DataTable
               columns={expenseColumns}
@@ -1966,6 +2015,17 @@ const AdminPanelPage = () => {
             ) : (
               <>
                 <div>
+                  <label className="label">Date</label>
+                  <input
+                    className="field"
+                    name="date"
+                    type="date"
+                    value={editForm.date || new Date().toISOString().slice(0, 10)}
+                    onChange={handleEditChange}
+                    required
+                  />
+                </div>
+                <div>
                   <label className="label">Category</label>
                   <select
                     className="field"
@@ -1979,6 +2039,7 @@ const AdminPanelPage = () => {
                     <option value="misc">Miscellaneous (Hotel &amp; Other)</option>
                   </select>
                 </div>
+      
                 <div>
                   <label className="label">Amount</label>
                   <input
@@ -1988,7 +2049,6 @@ const AdminPanelPage = () => {
                     min="0"
                     value={editForm.amount || ""}
                     onChange={handleEditChange}
-                    required
                   />
                 </div>
                 <div className="md:col-span-2">

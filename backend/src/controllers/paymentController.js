@@ -29,9 +29,9 @@ const getCustomerDetails = async (req, res) => {
       cdbId: normalizedCdbId,
       customerName: income.clientName,
       currentDue,
-      imeiNumber: income.imeiLastSix || "",
+      imeiNumber: income.imeiLastSix || income.imeiNo || "",
       vehicleNumber: income.vehicleChassisNo || "",
-      chassisNumber: income.vehicleChassisNo || ""
+      chassisNumber: income.model || ""
     });
   } catch (error) {
     console.error("GET CUSTOMER DETAILS ERROR 👉", error);

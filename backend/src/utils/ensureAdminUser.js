@@ -1,8 +1,13 @@
 const User = require("../models/User");
 
 const ensureAdminUser = async () => {
-  const adminUsername = process.env.ADMIN_USERNAME || "admin";
-  const adminPassword = process.env.ADMIN_PASSWORD || "admin123";
+  const adminUsername = process.env.ADMIN_USERNAME;
+  const adminPassword = process.env.ADMIN_PASSWORD;
+
+  if (!adminUsername || !adminPassword) {
+    console.warn("ADMIN_USERNAME or ADMIN_PASSWORD not set in .env — skipping admin setup");
+    return;
+  }
 
   await User.updateMany({ role: "staff" }, { $set: { role: "executive" } });
   await User.updateMany({ role: "user" }, { $set: { role: "executive" } });

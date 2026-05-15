@@ -20,6 +20,11 @@ const userSchema = new mongoose.Schema(
       type: String,
       enum: ["admin", "executive", "expense-only"],
       default: "executive"
+    },
+    expenseId: {
+      type: String,
+      trim: true,
+      default: ""
     }
   },
   {

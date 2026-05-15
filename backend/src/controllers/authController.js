@@ -3,15 +3,17 @@ const generateToken = require("../utils/generateToken");
 
 const register = async (req, res) => {
   try {
-    const { username, password, role } = req.body;
+    const { username, password, role, expenseId } = req.body;
 
     if (!username || !password) {
       return res.status(400).json({ message: "Username and password are required" });
     }
 
-    if (role && role !== "executive") {
-      return res.status(400).json({ message: "Admin can only create executive users" });
+    if (role && role !== "executive" && role !== "expense-only") {
+      return res.status(400).json({ message: "Admin can only create executive or expense-only users" });
     }
+
+    // No requirement for expenseId when creating expense-only users
 
     const existingUser = await User.findOne({ username });
 
@@ -22,15 +24,17 @@ const register = async (req, res) => {
     const user = await User.create({
       username,
       password,
-      role: "executive"
+      role: role || "executive",
+      expenseId: role === "expense-only" ? expenseId : ""
     });
 
     return res.status(201).json({
-      message: "Executive user created successfully",
+      message: role === "expense-only" ? "Expense-only user created successfully" : "Executive user created successfully",
       user: {
         id: user._id,
         username: user.username,
-        role: user.role
+        role: user.role,
+        expenseId: user.expenseId
       }
     });
   } catch (error) {

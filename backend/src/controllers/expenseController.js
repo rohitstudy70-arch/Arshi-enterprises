@@ -1,4 +1,5 @@
 const Expense = require("../models/Expense");
+// Allow free-form expenseId; no tag validation here
 const { buildScopedFilter } = require("../utils/recordFilters");
 
 const getStatusCode = (error) => {
@@ -7,13 +8,18 @@ const getStatusCode = (error) => {
 
 const addExpense = async (req, res) => {
   try {
-    const { category, amount, notes } = req.body;
+    const { category, amount, notes, userId, expenseId } = req.body;
 
+    // If userId is provided, only admins can set it; otherwise use current user
+    const expenseUserId = userId && req.user.role === "admin" ? userId : req.user.id;
+
+    // Accept any expenseId provided in the request body without validation/restriction
     const expense = await Expense.create({
-      userId: req.user.id,
+      userId: expenseUserId,
       category,
-      amount,
-      notes
+      amount: typeof amount === "number" ? amount : Number(amount || 0),
+      notes,
+      expenseId: expenseId || ""
     });
 
     return res.status(201).json({ expense });
@@ -36,7 +42,7 @@ const getExpenses = async (req, res) => {
 
 const updateExpense = async (req, res) => {
   try {
-    const allowedFields = ["category", "amount", "notes"];
+    const allowedFields = ["category", "amount", "notes", "expenseId"];
     const updates = Object.fromEntries(
       Object.entries(req.body).filter(([key]) => allowedFields.includes(key))
     );

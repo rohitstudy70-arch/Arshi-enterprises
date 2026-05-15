@@ -30,7 +30,7 @@ const LoginPage = () => {
     } catch (requestError) {
       setError(
         requestError.response?.data?.message ||
-        "Backend unavailable on http://localhost:4000. Start the server and try again."
+        "Server is currently unavailable. Please try again later."
       );
     } finally {
       setSubmitting(false);
