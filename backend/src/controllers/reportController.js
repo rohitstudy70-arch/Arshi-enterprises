@@ -224,6 +224,7 @@ const generateIncomeExcelByPeriod = async (req, res, days, filename) => {
         'Client Name',
         'Mobile 1',
         'Vehicle / Chassis',
+        'Challan No',
         'Service Type',
         'Description',
         'CCTV Details / Model',
@@ -253,7 +254,7 @@ const generateIncomeExcelByPeriod = async (req, res, days, filename) => {
         cell.font = { bold: true };
         cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF4F4F4' } };
       });
-      [14, 14, 12, 28, 16, 20, 22, 30, 22, 18, 18, 16, 14, 18, 20, 8, 14, 16, 20, 14, 16, 14, 14, 20, 18, 20, 16, 30].forEach((width, idx) => {
+      [14, 14, 12, 28, 16, 20, 20, 22, 30, 22, 18, 18, 16, 14, 18, 20, 8, 14, 16, 20, 14, 16, 14, 14, 20, 18, 20, 16, 30].forEach((width, idx) => {
         sheet.getColumn(idx + 1).width = width;
       });
       sheet.getColumn(1).numFmt = 'dd/mm/yyyy';
@@ -297,31 +298,32 @@ const generateIncomeExcelByPeriod = async (req, res, days, filename) => {
         sheet.getCell(row, 4).value = r.clientName || '';
         sheet.getCell(row, 5).value = r.mobile1 || '';
         sheet.getCell(row, 6).value = r.vehicleChassisNo || '';
-        sheet.getCell(row, 7).value = serviceType;
-        sheet.getCell(row, 8).value = r.description || '';
-        sheet.getCell(row, 9).value = isCctv ? (r.cctvDetails || '') : (r.model || '');
-        sheet.getCell(row, 10).value = isCctv ? (r.cctvSerialNo || '') : '';
-        sheet.getCell(row, 11).value = isCctv ? '' : (r.model || '');
-        sheet.getCell(row, 12).value = r.imeiLastSix || '';
-        sheet.getCell(row, 13).value = r.vtsNo || '';
-        sheet.getCell(row, 14).value = r.technician || '';
-        sheet.getCell(row, 15).value = r.reference || '';
-        sheet.getCell(row, 16).value = r.quantity || 1;
-        sheet.getCell(row, 17).value = safeNum(r.billAmount);
-        sheet.getCell(row, 18).value = safeNum(r.receivedAmount);
-        sheet.getCell(row, 19).value = safeNum(r.previousDuesReceived);
-        sheet.getCell(row, 20).value = {
-          formula: `Q${row}-R${row}-S${row}`,
+        sheet.getCell(row, 7).value = r.challanNo || '';
+        sheet.getCell(row, 8).value = serviceType;
+        sheet.getCell(row, 9).value = r.description || '';
+        sheet.getCell(row, 10).value = isCctv ? (r.cctvDetails || '') : (r.model || '');
+        sheet.getCell(row, 11).value = isCctv ? (r.cctvSerialNo || '') : '';
+        sheet.getCell(row, 12).value = isCctv ? '' : (r.model || '');
+        sheet.getCell(row, 13).value = r.imeiLastSix || '';
+        sheet.getCell(row, 14).value = r.vtsNo || '';
+        sheet.getCell(row, 15).value = r.technician || '';
+        sheet.getCell(row, 16).value = r.reference || '';
+        sheet.getCell(row, 17).value = r.quantity || 1;
+        sheet.getCell(row, 18).value = safeNum(r.billAmount);
+        sheet.getCell(row, 19).value = safeNum(r.receivedAmount);
+        sheet.getCell(row, 20).value = safeNum(r.previousDuesReceived);
+        sheet.getCell(row, 21).value = {
+          formula: `R${row}-S${row}-T${row}`,
           result: safeNum(r.billAmount) - safeNum(r.receivedAmount) - safeNum(r.previousDuesReceived)
         };
-        sheet.getCell(row, 21).value = r.paymentMode || '';
-        sheet.getCell(row, 22).value = safeNum(r.cashAmount);
-        sheet.getCell(row, 23).value = safeNum(r.upiAmount);
-        sheet.getCell(row, 24).value = r.upiReferenceId || '';
-        sheet.getCell(row, 25).value = r.bankPersonName || '';
-        sheet.getCell(row, 26).value = r.cashReceivedBy || '';
-        sheet.getCell(row, 27).value = r.userId?.username || '';
-        sheet.getCell(row, 28).value = r.remarks || '';
+        sheet.getCell(row, 22).value = r.paymentMode || '';
+        sheet.getCell(row, 23).value = safeNum(r.cashAmount);
+        sheet.getCell(row, 24).value = safeNum(r.upiAmount);
+        sheet.getCell(row, 25).value = r.upiReferenceId || '';
+        sheet.getCell(row, 26).value = r.bankPersonName || '';
+        sheet.getCell(row, 27).value = r.cashReceivedBy || '';
+        sheet.getCell(row, 28).value = r.userId?.username || '';
+        sheet.getCell(row, 29).value = r.remarks || '';
       });
 
       const addSummaryBlock = (targetSheet, startCol, title, color, rows) => {

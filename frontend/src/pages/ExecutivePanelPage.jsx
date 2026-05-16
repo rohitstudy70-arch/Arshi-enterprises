@@ -47,6 +47,7 @@ const initialIncomeForm = {
   upiAmount: "",
   cctvDetails: "",
   cctvSerialNo: "",
+  challanNo: "",
   remarks: ""
 };
 
@@ -143,9 +144,12 @@ const ExecutivePanelPage = () => {
       }
 
       if (name === "serviceType") {
+        const isCctv = value === "CCTV Installation";
         return {
           ...current,
           serviceType: value,
+          vehicleChassisNo: isCctv ? "" : current.vehicleChassisNo,
+          challanNo: isCctv ? "" : current.challanNo,
           vtsNo: "",
           cctvDetails: ""
         };
@@ -261,7 +265,8 @@ const ExecutivePanelPage = () => {
             ? incomeForm.upiReferenceId
             : "",
         cashAmount: incomeForm.paymentMode === "split" ? Number(incomeForm.cashAmount || 0) : 0,
-        upiAmount: incomeForm.paymentMode === "split" ? Number(incomeForm.upiAmount || 0) : 0
+        upiAmount: incomeForm.paymentMode === "split" ? Number(incomeForm.upiAmount || 0) : 0,
+        challanNo: incomeForm.challanNo
       });
       setIncomeForm(initialIncomeForm);
       setIncomeFeedback({ type: "success", message: "Income saved successfully." });
@@ -280,10 +285,23 @@ const ExecutivePanelPage = () => {
     setExpenseFeedback(null);
 
     try {
-      await api.post("/expenses", {
-        ...expenseForm,
-        amount: Number(expenseForm.amount)
-      });
+      const submissions = expenseCategoryFields
+        .filter((f) => Number(expenseForm[f.key] || 0) > 0)
+        .map((f) =>
+          api.post("/expenses", {
+            category: f.category,
+            amount: Number(expenseForm[f.key]),
+            notes: expenseForm.notes
+          })
+        );
+
+      if (submissions.length === 0) {
+        setExpenseFeedback({ type: "error", message: "Please enter at least one expense amount." });
+        setSubmittingExpense(false);
+        return;
+      }
+
+      await Promise.all(submissions);
 
       setExpenseForm(initialExpenseForm);
       setExpenseFeedback({
@@ -329,6 +347,7 @@ const ExecutivePanelPage = () => {
         ...(name === "serviceType"
           ? {
             vehicleChassisNo: "",
+            challanNo: "",
             model: "",
             imeiNo: "",
             imeiLastSix: "",
@@ -391,6 +410,7 @@ const ExecutivePanelPage = () => {
           upiAmount: data.paymentMode === "split" ? Number(data.upiAmount || 0) : 0,
           cctvDetails: data.serviceType === "CCTV Installation" ? (data.cctvDetails || "") : "",
           cctvSerialNo: data.serviceType === "CCTV Installation" ? (data.cctvSerialNo || "") : "",
+          challanNo: data.challanNo || "",
           remarks: data.remarks || ""
         });
       } else {
@@ -437,6 +457,7 @@ const ExecutivePanelPage = () => {
     { key: "clientName", header: "Client Name" },
     { key: "mobile1", header: "Mobile 1" },
     { key: "vehicleChassisNo", header: "Vehicle / Chassis" },
+    { key: "challanNo", header: "Challan No" },
     { key: "serviceType", header: "Service Type", render: (row) => row.serviceType || row.description },
     { key: "description", header: "Description" },
     { key: "cctvDetails", header: "CCTV Details / Model" },
@@ -541,10 +562,18 @@ const ExecutivePanelPage = () => {
                 <label className="label">District</label>
                 <input className="field" name="district" value={incomeForm.district} onChange={handleIncomeChange} />
               </div>
-              <div>
-                <label className="label">Vehicle / Chassis No</label>
-                <input className="field" name="vehicleChassisNo" value={incomeForm.vehicleChassisNo} onChange={handleIncomeChange} />
-              </div>
+              {incomeForm.serviceType !== "CCTV Installation" && (
+                <>
+                  <div>
+                    <label className="label">Vehicle / Chassis No</label>
+                    <input className="field" name="vehicleChassisNo" value={incomeForm.vehicleChassisNo} onChange={handleIncomeChange} />
+                  </div>
+                  <div>
+                    <label className="label">Challan No</label>
+                    <input className="field" name="challanNo" value={incomeForm.challanNo} onChange={handleIncomeChange} />
+                  </div>
+                </>
+              )}
               <div className="md:col-span-2">
                 <label className="label">Service Type *</label>
                 <select className="field" name="serviceType" value={incomeForm.serviceType} onChange={handleIncomeChange} required>
@@ -886,12 +915,18 @@ const ExecutivePanelPage = () => {
                     <label className="label">District</label>
                     <input className="field" name="district" value={editing.data.district || ""} onChange={handleEditChange} />
                   </div>
-                  {editing.data.serviceType !== "CCTV Installation" ? (
-                    <div>
-                      <label className="label">Vehicle / Chassis No</label>
-                      <input className="field" name="vehicleChassisNo" value={editing.data.vehicleChassisNo || ""} onChange={handleEditChange} />
-                    </div>
-                  ) : null}
+                  {editing.data.serviceType !== "CCTV Installation" && (
+                    <>
+                      <div>
+                        <label className="label">Vehicle / Chassis No</label>
+                        <input className="field" name="vehicleChassisNo" value={editing.data.vehicleChassisNo || ""} onChange={handleEditChange} />
+                      </div>
+                      <div>
+                        <label className="label">Challan No</label>
+                        <input className="field" name="challanNo" value={editing.data.challanNo || ""} onChange={handleEditChange} />
+                      </div>
+                    </>
+                  )}
                   <div className="md:col-span-2">
                     <label className="label">Service Type *</label>
                     <select className="field" name="serviceType" value={editing.data.serviceType || editing.data.description || ""} onChange={handleEditChange} required>

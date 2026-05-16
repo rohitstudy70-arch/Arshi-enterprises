@@ -54,6 +54,7 @@ const addIncome = async (req, res) => {
       upiAmount,
       cctvDetails,
       cctvSerialNo,
+      challanNo,
       remarks
     } = req.body;
 
@@ -97,6 +98,7 @@ const addIncome = async (req, res) => {
       upiAmount,
       cctvDetails,
       cctvSerialNo,
+      challanNo,
       remarks
     });
 
@@ -160,6 +162,7 @@ const updateIncome = async (req, res) => {
       "upiAmount",
       "cctvDetails",
       "cctvSerialNo",
+      "challanNo",
       "remarks"
     ];
 

@@ -65,6 +65,11 @@ const incomeSchema = new mongoose.Schema(
       trim: true,
       default: ""
     },
+    challanNo: {
+      type: String,
+      trim: true,
+      default: ""
+    },
     clientUserId: {
       type: String,
       trim: true,

@@ -625,6 +625,7 @@ const AdminPanelPage = () => {
         upiAmount: record.upiAmount || 0,
         cctvDetails: record.cctvDetails || "",
         cctvSerialNo: record.cctvSerialNo || "",
+        challanNo: record.challanNo || "",
         remarks: record.remarks || ""
       });
       return;
@@ -650,6 +651,8 @@ const AdminPanelPage = () => {
       [name]: value,
       ...(name === "serviceType"
         ? {
+          vehicleChassisNo: value === "CCTV Installation" ? "" : current.vehicleChassisNo,
+          challanNo: value === "CCTV Installation" ? "" : current.challanNo,
           vtsNo: "",
           cctvDetails: "",
           cctvSerialNo: ""
@@ -694,6 +697,7 @@ const AdminPanelPage = () => {
           upiAmount: Number(editForm.upiAmount || 0),
           cctvDetails: editForm.serviceType === "CCTV Installation" ? editForm.cctvDetails : "",
           cctvSerialNo: editForm.serviceType === "CCTV Installation" ? editForm.cctvSerialNo : "",
+          challanNo: editForm.challanNo || "",
           remarks: editForm.remarks || ""
         });
       } else {
@@ -819,6 +823,7 @@ const AdminPanelPage = () => {
     { key: "clientName", header: "Client Name" },
     { key: "mobile1", header: "Mobile 1" },
     { key: "vehicleChassisNo", header: "Vehicle / Chassis" },
+    { key: "challanNo", header: "Challan No" },
     { key: "serviceType", header: "Service Type", render: (row) => row.serviceType || row.description },
     { key: "description", header: "Description" },
     { key: "cctvDetails", header: "CCTV Details / Model" },
@@ -1855,15 +1860,28 @@ const AdminPanelPage = () => {
                     onChange={handleEditChange}
                   />
                 </div>
-                <div>
-                  <label className="label">Vehicle / Chassis No</label>
-                  <input
-                    className="field"
-                    name="vehicleChassisNo"
-                    value={editForm.vehicleChassisNo || ""}
-                    onChange={handleEditChange}
-                  />
-                </div>
+                {editForm.serviceType !== "CCTV Installation" && (
+                  <>
+                    <div>
+                      <label className="label">Vehicle / Chassis No</label>
+                      <input
+                        className="field"
+                        name="vehicleChassisNo"
+                        value={editForm.vehicleChassisNo || ""}
+                        onChange={handleEditChange}
+                      />
+                    </div>
+                    <div>
+                      <label className="label">Challan No</label>
+                      <input
+                        className="field"
+                        name="challanNo"
+                        value={editForm.challanNo || ""}
+                        onChange={handleEditChange}
+                      />
+                    </div>
+                  </>
+                )}
                 <div className="md:col-span-2">
                   <label className="label">Service Type</label>
                   <select
