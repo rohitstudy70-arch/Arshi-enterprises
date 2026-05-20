@@ -351,27 +351,33 @@ const generateIncomeExcelByPeriod = async (req, res, days, filename) => {
 
       const summaryRows = {
         revenue: [
-          ['Revenue till Yesterday', 'SUMIF(Income!A:A,"<"&TODAY(),Income!Q:Q)', revenueTillYesterday],
-          ["Today's Revenue", 'SUMIFS(Income!Q:Q,Income!A:A,">="&TODAY(),Income!A:A,"<"&TODAY()+1)', todayRevenue],
-          ['Total Revenue (Current Period)', 'SUM(Income!Q:Q)', totalRevenue]
+          ['Revenue till Yesterday', 'SUMIF(Income!A:A,"<"&TODAY(),Income!R:R)', revenueTillYesterday],
+          ["Today's Revenue", 'SUMIFS(Income!R:R,Income!A:A,">="&TODAY(),Income!A:A,"<"&TODAY()+1)', todayRevenue],
+          ['Total Revenue (Current Period)', 'SUM(Income!R:R)', totalRevenue]
         ],
         received: [
-          ['Total Received till Yesterday', 'SUMIF(Income!A:A,"<"&TODAY(),Income!R:R)+SUMIF(Income!A:A,"<"&TODAY(),Income!S:S)', receivedTillYesterday],
-          ["Today's Received", 'SUMIFS(Income!R:R,Income!A:A,">="&TODAY(),Income!A:A,"<"&TODAY()+1)+SUMIFS(Income!S:S,Income!A:A,">="&TODAY(),Income!A:A,"<"&TODAY()+1)', todayReceived],
-          ['Previous Dues Amount Received (+)', 'SUM(Income!S:S)', previousDuesReceivedTotal],
-          ['Total Received (Current Period)', 'SUM(Income!R:R)+SUM(Income!S:S)', totalReceived]
+          ['Total Received till Yesterday', 'SUMIF(Income!A:A,"<"&TODAY(),Income!S:S)+SUMIF(Income!A:A,"<"&TODAY(),Income!T:T)', receivedTillYesterday],
+          ["Today's Received", 'SUMIFS(Income!S:S,Income!A:A,">="&TODAY(),Income!A:A,"<"&TODAY()+1)+SUMIFS(Income!T:T,Income!A:A,">="&TODAY(),Income!A:A,"<"&TODAY()+1)', todayReceived],
+          ['Previous Dues Amount Received (+)', 'SUM(Income!T:T)', previousDuesReceivedTotal],
+          ['Total Received (Current Period)', 'SUM(Income!S:S)+SUM(Income!T:T)', totalReceived]
         ],
         dues: [
-          ['Total Dues till Yesterday', 'SUMIF(Income!A:A,"<"&TODAY(),Income!T:T)', duesTillYesterday],
-          ["Today's Dues", 'SUMIFS(Income!T:T,Income!A:A,">="&TODAY(),Income!A:A,"<"&TODAY()+1)', todayDues],
-          ['Previous Dues Amount Received (-)', 'SUM(Income!S:S)', previousDuesReceivedTotal],
-          ['Total Dues Till Date', 'SUM(Income!T:T)', totalDues]
+          ['Total Dues till Yesterday', 'SUMIF(Income!A:A,"<"&TODAY(),Income!U:U)', duesTillYesterday],
+          ["Today's Dues", 'SUMIFS(Income!U:U,Income!A:A,">="&TODAY(),Income!A:A,"<"&TODAY()+1)', todayDues],
+          ['Previous Dues Amount Received (-)', 'SUM(Income!T:T)', previousDuesReceivedTotal],
+          ['Total Dues Till Date', 'SUM(Income!U:U)', totalDues]
         ]
       };
 
-      addSummaryBlock(sheet, 28, 'REVENUE', 'FF15803D', summaryRows.revenue);
-      addSummaryBlock(sheet, 31, 'RECEIVED', 'FFCA8A04', summaryRows.received);
-      addSummaryBlock(sheet, 34, 'DUES', 'FFDC2626', summaryRows.dues);
+      // Set width for spacer columns
+      sheet.getColumn(30).width = 4;
+      sheet.getColumn(33).width = 4;
+      sheet.getColumn(36).width = 4;
+
+      // Add summary blocks outside data bounds to avoid overwriting Executive and Remarks
+      addSummaryBlock(sheet, 31, 'REVENUE', 'FF15803D', summaryRows.revenue);
+      addSummaryBlock(sheet, 34, 'RECEIVED', 'FFCA8A04', summaryRows.received);
+      addSummaryBlock(sheet, 37, 'DUES', 'FFDC2626', summaryRows.dues);
 
       const dashboardSheet = workbook.addWorksheet('Dashboard');
       addSummaryBlock(dashboardSheet, 1, 'REVENUE', 'FF15803D', summaryRows.revenue);
