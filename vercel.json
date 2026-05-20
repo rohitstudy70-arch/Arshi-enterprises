@@ -1,0 +1,23 @@
+{
+  "version": 2,
+  "buildCommand": "cd frontend && npm install && npm run build",
+  "outputDirectory": "frontend/dist",
+  "rewrites": [
+    {
+      "source": "/api/:path*",
+      "destination": "/api/:path*"
+    },
+    {
+      "source": "/(.*)",
+      "destination": "/index.html"
+    }
+  ],
+  "experimentalServices": {
+    "arshi-enterprises-backend": {
+      "type": "web",
+      "entrypoint": "backend",
+      "routePrefix": "/",
+      "buildCommand": "npm install"
+    }
+  }
+}
