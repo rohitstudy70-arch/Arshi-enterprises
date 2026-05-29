@@ -438,7 +438,7 @@ const AdminPanelPage = () => {
   };
 
   const handleDeleteUser = async (userId) => {
-    const confirmed = window.confirm("Delete this user?");
+    const confirmed = window.confirm("Delete this user? This cannot be undone.");
 
     if (!confirmed) {
       return;
@@ -449,6 +449,8 @@ const AdminPanelPage = () => {
     try {
       await api.delete(`/auth/users/${userId}`);
       await refreshAdminData();
+    } catch (error) {
+      window.alert(error.response?.data?.message || "Unable to delete user.");
     } finally {
       setDeletingUserId("");
     }

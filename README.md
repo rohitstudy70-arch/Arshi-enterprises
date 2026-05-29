@@ -8,8 +8,7 @@ A full-stack business finance management system built for **Arshi Enterprises**.
 |----------|-----------------------------------------|
 | Frontend | React 18, Vite, Tailwind CSS, Axios     |
 | Backend  | Node.js, Express, MongoDB, Mongoose     |
-| Auth     | JWT (JSON Web Tokens), bcrypt           |
-| Reports  | ExcelJS (PDF & Excel export)            |
+| Auth     | JWT (JSON Web Tokens), bcrypt     
 | Deploy   | Vercel (frontend) + Render (backend)    |
 
 ## Features
@@ -31,7 +30,8 @@ Arshi-enterprises/
 │   ├── src/
 │   │   ├── config/            # Database connection
 │   │   ├── controllers/       # Route handlers
-│   │   ├── middleware/         # Auth & role middleware
+│   │   ├── middleware/      |
+| Reports  | ExcelJS (PDF & Excel export)            |         # Auth & role middleware
 │   │   ├── models/            # Mongoose schemas
 │   │   ├── routes/            # API route definitions
 │   │   ├── services/          # Business logic

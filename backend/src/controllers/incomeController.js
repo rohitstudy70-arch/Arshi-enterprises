@@ -63,6 +63,28 @@ const addIncome = async (req, res) => {
       return res.status(403).json({ message: "Only admin can submit previous dues received" });
     }
 
+    // ===== DUPLICATE CUSTOMER CHECK =====
+    // Prevent re-entry of existing customers by checking mobile1 and vehicleChassisNo
+    const duplicateConditions = [];
+    if (mobile1 && String(mobile1).trim()) {
+      duplicateConditions.push({ mobile1: String(mobile1).trim() });
+    }
+    if (vehicleChassisNo && String(vehicleChassisNo).trim()) {
+      duplicateConditions.push({ vehicleChassisNo: String(vehicleChassisNo).trim() });
+    }
+
+    if (duplicateConditions.length > 0) {
+      const existingRecord = await Income.findOne({ $or: duplicateConditions }).lean();
+      if (existingRecord) {
+        const matchedField = existingRecord.mobile1 === String(mobile1).trim()
+          ? `Mobile No (${mobile1})`
+          : `Vehicle/Chassis No (${vehicleChassisNo})`;
+        return res.status(400).json({
+          message: `Existing customer found! ${matchedField} already exists for "${existingRecord.clientName}" (CDB No: ${existingRecord.cbNumber || "N/A"}). Duplicate entry is not allowed.`
+        });
+      }
+    }
+
     const cdbNumber = await getNextCdbNumber();
 
     const income = await Income.create({

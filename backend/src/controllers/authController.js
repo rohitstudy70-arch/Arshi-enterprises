@@ -148,13 +148,13 @@ const deleteUser = async (req, res) => {
       return res.status(404).json({ message: "User not found" });
     }
 
-    if (user.role !== "executive") {
-      return res.status(403).json({ message: "Only executive users can be deleted" });
+    if (user.role === "admin") {
+      return res.status(403).json({ message: "Admin users cannot be deleted" });
     }
 
     await user.deleteOne();
 
-    return res.status(200).json({ message: "Executive user deleted successfully" });
+    return res.status(200).json({ message: `${user.role} user "${user.username}" deleted successfully` });
   } catch (error) {
     return res.status(500).json({ message: error.message });
   }
@@ -174,8 +174,8 @@ const updateUserPassword = async (req, res) => {
       return res.status(404).json({ message: "User not found" });
     }
 
-    if (user.role !== "executive") {
-      return res.status(403).json({ message: "Only executive user passwords can be changed" });
+    if (user.role === "admin") {
+      return res.status(403).json({ message: "Admin user passwords cannot be changed from here" });
     }
 
     user.password = password;

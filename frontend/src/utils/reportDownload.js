@@ -1,14 +1,59 @@
 import api from "../api";
 
-const saveBlob = (blob, filename) => {
+const isMobile = () => {
+  return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+};
+
+const isIOS = () => {
+  return /iPhone|iPad|iPod/i.test(navigator.userAgent) ||
+    (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+};
+
+const saveBlob = async (blob, filename) => {
+  // Method 1: Web Share API (works great on mobile, lets user save to Files/Downloads)
+  if (isMobile() && navigator.share && navigator.canShare) {
+    try {
+      const file = new File([blob], filename, { type: blob.type });
+      if (navigator.canShare({ files: [file] })) {
+        await navigator.share({
+          files: [file],
+          title: filename
+        });
+        return;
+      }
+    } catch (err) {
+      // User cancelled share or share failed, fall through to next method
+      if (err.name === "AbortError") return;
+      console.warn("Share API failed, falling back:", err);
+    }
+  }
+
+  // Method 2: For iOS Safari — open blob in new tab (user can then long-press to save)
+  if (isIOS()) {
+    const url = window.URL.createObjectURL(blob);
+    const newWindow = window.open(url, "_blank");
+    if (newWindow) {
+      // Clean up after a delay
+      setTimeout(() => window.URL.revokeObjectURL(url), 60000);
+      return;
+    }
+    // If popup was blocked, fall through
+    window.URL.revokeObjectURL(url);
+  }
+
+  // Method 3: Standard download link (works on desktop and most Android browsers)
   const url = window.URL.createObjectURL(blob);
   const link = document.createElement("a");
   link.href = url;
   link.download = filename;
+  link.style.display = "none";
   document.body.appendChild(link);
   link.click();
-  link.remove();
-  window.URL.revokeObjectURL(url);
+  // Small delay before cleanup to ensure download starts
+  setTimeout(() => {
+    link.remove();
+    window.URL.revokeObjectURL(url);
+  }, 1000);
 };
 
 const getFilenameFromResponse = (response, fallback) => {
@@ -65,7 +110,7 @@ export const downloadIncomeExcelReport = async (period = "monthly", options = {}
   const blob = response.data;
   const disposition = response.headers["content-disposition"];
   const finalName = getFilenameFromResponse({ headers: { get: () => disposition } }, filename);
-  saveBlob(blob, finalName);
+  await saveBlob(blob, finalName);
 };
 
 // EXPENSE EXCEL REPORTS
@@ -96,7 +141,7 @@ export const downloadExpenseExcelReport = async (period = "monthly", options = {
   const blob = response.data;
   const disposition = response.headers["content-disposition"];
   const finalName = getFilenameFromResponse({ headers: { get: () => disposition } }, filename);
-  saveBlob(blob, finalName);
+  await saveBlob(blob, finalName);
 };
 
 // LEDGER (Transaction-based) EXCEL REPORTS
@@ -127,7 +172,7 @@ export const downloadLedgerExcelReport = async (period = "monthly", options = {}
   const blob = response.data;
   const disposition = response.headers["content-disposition"];
   const finalName = getFilenameFromResponse({ headers: { get: () => disposition } }, filename);
-  saveBlob(blob, finalName);
+  await saveBlob(blob, finalName);
 };
 
 // DUE & ITEM TRACKING REPORTS
@@ -141,7 +186,7 @@ export const downloadCustomerLedgerExcel = async (cdbId) => {
     { headers: { get: () => disposition } },
     `ledger-${cdbId}.xlsx`
   );
-  saveBlob(blob, finalName);
+  await saveBlob(blob, finalName);
 };
 
 export const downloadDueSummaryExcel = async () => {
@@ -152,7 +197,7 @@ export const downloadDueSummaryExcel = async () => {
     { headers: { get: () => disposition } },
     "due-summary.xlsx"
   );
-  saveBlob(blob, finalName);
+  await saveBlob(blob, finalName);
 };
 
 export const downloadImeiTrackingExcel = async (search = "") => {
@@ -166,7 +211,7 @@ export const downloadImeiTrackingExcel = async (search = "") => {
     { headers: { get: () => disposition } },
     `imei-tracking${search ? "-" + search : ""}.xlsx`
   );
-  saveBlob(blob, finalName);
+  await saveBlob(blob, finalName);
 };
 
 // LEGACY SUPPORT
