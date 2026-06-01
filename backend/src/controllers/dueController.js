@@ -52,9 +52,11 @@ const getCustomerLedger = async (req, res) => {
 
     const totalBill = incomes.reduce((s, i) => s + (Number(i.billAmount) || 0), 0);
     const totalPayment = incomes.reduce((s, i) => s + (Number(i.receivedAmount) || 0), 0);
+    const clientName = incomes[0]?.clientName || "Customer";
 
     return res.status(200).json({
       cdbId: normalizedCdbId,
+      clientName,
       transactions,
       totalBill,
       totalPayment,
@@ -183,8 +185,8 @@ const updateCustomerDue = async (req, res) => {
       return res.status(400).json({ message: "dueAmount must be a valid non-negative number" });
     }
 
-    // Find all income records for this customer
-    const incomes = await Income.find({ cbNumber: normalizedCdbId });
+    // Find all income records for this customer, sorted by newest first
+    const incomes = await Income.find({ cbNumber: normalizedCdbId }).sort({ createdAt: -1 });
 
     if (incomes.length === 0) {
       return res.status(404).json({ message: "No records found for this customer" });

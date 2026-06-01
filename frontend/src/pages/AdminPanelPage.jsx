@@ -86,6 +86,11 @@ const AdminPanelPage = () => {
   const [customerDetails, setCustomerDetails] = useState(null);
   const [loadingCustomerDetails, setLoadingCustomerDetails] = useState(false);
 
+  // Modify Due Modal
+  const [modifyDueModal, setModifyDueModal] = useState({ open: false, cdbId: "", currentDue: 0, customerName: "" });
+  const [newDueAmount, setNewDueAmount] = useState("");
+  const [modifyingDue, setModifyingDue] = useState(false);
+
   const editingIncomeDues =
     editingRecord?.type === "income" ? calculateDues(editForm.billAmount, editForm.receivedAmount) : 0;
 
@@ -294,6 +299,74 @@ const AdminPanelPage = () => {
       vehicleNumber: "",
       chassisNumber: ""
     });
+  };
+
+  const openModifyDueModal = (cdbId, currentDue, customerName) => {
+    setModifyDueModal({ open: true, cdbId, currentDue, customerName });
+    setNewDueAmount(currentDue.toString());
+  };
+
+  const closeModifyDueModal = () => {
+    setModifyDueModal({ open: false, cdbId: "", currentDue: 0, customerName: "" });
+    setNewDueAmount("");
+  };
+
+  const handleModifyDue = async (e) => {
+    e.preventDefault();
+    if (newDueAmount === "" || isNaN(Number(newDueAmount)) || Number(newDueAmount) < 0) {
+      alert("Please enter a valid non-negative due amount");
+      return;
+    }
+
+    setModifyingDue(true);
+    try {
+      await api.put("/due/update", {
+        cdbId: modifyDueModal.cdbId,
+        dueAmount: Number(newDueAmount)
+      });
+      alert("Due amount updated successfully!");
+      closeModifyDueModal();
+      // Refresh all data
+      await Promise.all([
+        loadDueSummary().catch(() => {}),
+        loadRecords({}).catch(() => {}),
+        modifyDueModal.cdbId ? loadLedger(modifyDueModal.cdbId).catch(() => {}) : Promise.resolve()
+      ]);
+    } catch (error) {
+      console.error("Error modifying due:", error);
+      alert(error.response?.data?.message || "Failed to modify due");
+    } finally {
+      setModifyingDue(false);
+    }
+  };
+
+  const handleDeleteDue = async (cdbId, currentDue, customerName) => {
+    const confirmed = confirm(
+      `Delete Due Confirmation:\n\n` +
+      `Customer: ${customerName}\n` +
+      `CDB ID: ${cdbId}\n` +
+      `Current Due: ₹${formatCurrency(currentDue)}\n\n` +
+      `This will clear/reset the customer's due to ₹0. Are you sure you want to proceed?`
+    );
+
+    if (!confirmed) return;
+
+    try {
+      await api.put("/due/update", {
+        cdbId,
+        dueAmount: 0
+      });
+      alert("Due deleted (reset to zero) successfully!");
+      // Refresh all data
+      await Promise.all([
+        loadDueSummary().catch(() => {}),
+        loadRecords({}).catch(() => {}),
+        cdbId ? loadLedger(cdbId).catch(() => {}) : Promise.resolve()
+      ]);
+    } catch (error) {
+      console.error("Error deleting due:", error);
+      alert(error.response?.data?.message || "Failed to delete due");
+    }
   };
 
   const calculatedNewDue = updateDueModal.currentDue - (Number(paymentForm.paymentAmount) || 0);
@@ -875,15 +948,31 @@ const AdminPanelPage = () => {
             type="button"
             className="button-primary px-3 py-2 text-xs"
             onClick={() => openUpdateDueModal(row.cbNumber, row.dues, row.clientName)}
+            disabled={row.dues <= 0}
           >
             Update Due
+          </button>
+          <button
+            type="button"
+            className="button-secondary px-3 py-2 text-xs"
+            onClick={() => openModifyDueModal(row.cbNumber, row.dues, row.clientName)}
+          >
+            Modify Due
+          </button>
+          <button
+            type="button"
+            className="bg-red-50 text-red-600 hover:bg-red-100 border border-red-200 rounded-xl px-3 py-2 text-xs font-semibold transition disabled:opacity-50"
+            onClick={() => handleDeleteDue(row.cbNumber, row.dues, row.clientName)}
+            disabled={row.dues <= 0}
+          >
+            Delete Due
           </button>
           <button
             type="button"
             className="button-danger px-3 py-2 text-xs"
             onClick={() => handleDeleteRecord("income", row._id)}
           >
-            Delete
+            Delete Record
           </button>
         </div>
       )
@@ -1499,14 +1588,30 @@ const AdminPanelPage = () => {
                 rows={ledgerData.transactions || []}
                 emptyMessage="No transactions found for this CDB ID."
               />
-              <div className="mt-4 flex justify-end">
+              <div className="mt-4 flex flex-wrap justify-end gap-2">
                 <button
                   type="button"
                   className="button-primary"
-                  onClick={() => openUpdateDueModal(ledgerCdbId, ledgerData.due, ledgerData.customerName || "Customer")}
-                  disabled={!ledgerData}
+                  onClick={() => openUpdateDueModal(ledgerCdbId, ledgerData.due, ledgerData.clientName || "Customer")}
+                  disabled={!ledgerData || ledgerData.due <= 0}
                 >
                   Update Due
+                </button>
+                <button
+                  type="button"
+                  className="button-secondary"
+                  onClick={() => openModifyDueModal(ledgerCdbId, ledgerData.due, ledgerData.clientName || "Customer")}
+                  disabled={!ledgerData}
+                >
+                  Modify Due
+                </button>
+                <button
+                  type="button"
+                  className="bg-red-50 text-red-600 hover:bg-red-100 border border-red-200 rounded-xl px-4 py-2 font-medium transition disabled:opacity-50"
+                  onClick={() => handleDeleteDue(ledgerCdbId, ledgerData.due, ledgerData.clientName || "Customer")}
+                  disabled={!ledgerData || ledgerData.due <= 0}
+                >
+                  Delete Due
                 </button>
               </div>
             </>
@@ -1619,13 +1724,31 @@ const AdminPanelPage = () => {
                     key: "actions",
                     header: "Actions",
                     render: (row) => (
-                      <button
-                        type="button"
-                        className="button-primary px-3 py-2 text-xs"
-                        onClick={() => openUpdateDueModal(row.cdbId, row.totalDue, row.clientName)}
-                      >
-                        Update Due
-                      </button>
+                      <div className="flex flex-wrap gap-1">
+                        <button
+                          type="button"
+                          className="button-primary px-2 py-1 text-xs"
+                          onClick={() => openUpdateDueModal(row.cdbId, row.totalDue, row.clientName)}
+                          disabled={row.totalDue <= 0}
+                        >
+                          Update
+                        </button>
+                        <button
+                          type="button"
+                          className="button-secondary px-2 py-1 text-xs"
+                          onClick={() => openModifyDueModal(row.cdbId, row.totalDue, row.clientName)}
+                        >
+                          Modify
+                        </button>
+                        <button
+                          type="button"
+                          className="bg-red-50 text-red-600 hover:bg-red-100 border border-red-200 rounded px-2 py-1 text-xs font-semibold transition disabled:opacity-50"
+                          onClick={() => handleDeleteDue(row.cdbId, row.totalDue, row.clientName)}
+                          disabled={row.totalDue <= 0}
+                        >
+                          Delete
+                        </button>
+                      </div>
                     )
                   }
                 ]}
@@ -1668,13 +1791,31 @@ const AdminPanelPage = () => {
                     key: "actions",
                     header: "Actions",
                     render: (row) => (
-                      <button
-                        type="button"
-                        className="button-primary px-3 py-2 text-xs"
-                        onClick={() => openUpdateDueModal(row.cdbId, row.totalDue, row.clientName)}
-                      >
-                        Update Due
-                      </button>
+                      <div className="flex flex-wrap gap-1">
+                        <button
+                          type="button"
+                          className="button-primary px-2 py-1 text-xs"
+                          onClick={() => openUpdateDueModal(row.cdbId, row.totalDue, row.clientName)}
+                          disabled={row.totalDue <= 0}
+                        >
+                          Update
+                        </button>
+                        <button
+                          type="button"
+                          className="button-secondary px-2 py-1 text-xs"
+                          onClick={() => openModifyDueModal(row.cdbId, row.totalDue, row.clientName)}
+                        >
+                          Modify
+                        </button>
+                        <button
+                          type="button"
+                          className="bg-red-50 text-red-600 hover:bg-red-100 border border-red-200 rounded px-2 py-1 text-xs font-semibold transition disabled:opacity-50"
+                          onClick={() => handleDeleteDue(row.cdbId, row.totalDue, row.clientName)}
+                          disabled={row.totalDue <= 0}
+                        >
+                          Delete
+                        </button>
+                      </div>
                     )
                   }
                 ]}
@@ -1752,13 +1893,31 @@ const AdminPanelPage = () => {
                 key: "actions",
                 header: "Actions",
                 render: (row) => (
-                  <button
-                    type="button"
-                    className="button-primary px-3 py-2 text-xs"
-                    onClick={() => openUpdateDueModal(row.cdbId, row.dueAmount, row.clientName)}
-                  >
-                    Update Due
-                  </button>
+                  <div className="flex flex-wrap gap-1">
+                    <button
+                      type="button"
+                      className="button-primary px-2 py-1 text-xs"
+                      onClick={() => openUpdateDueModal(row.cdbId, row.dueAmount, row.clientName)}
+                      disabled={row.dueAmount <= 0}
+                    >
+                      Update
+                    </button>
+                    <button
+                      type="button"
+                      className="button-secondary px-2 py-1 text-xs"
+                      onClick={() => openModifyDueModal(row.cdbId, row.dueAmount, row.clientName)}
+                    >
+                      Modify
+                    </button>
+                    <button
+                      type="button"
+                      className="bg-red-50 text-red-600 hover:bg-red-100 border border-red-200 rounded px-2 py-1 text-xs font-semibold transition disabled:opacity-50"
+                      onClick={() => handleDeleteDue(row.cdbId, row.dueAmount, row.clientName)}
+                      disabled={row.dueAmount <= 0}
+                    >
+                      Delete
+                    </button>
+                  </div>
                 )
               }
             ]}
@@ -2322,6 +2481,50 @@ const AdminPanelPage = () => {
               </div>
             </form>
           )}
+        </RecordModal>
+      ) : null}
+
+      {modifyDueModal.open ? (
+        <RecordModal title={`Modify Customer Due - ${modifyDueModal.customerName}`} onClose={closeModifyDueModal}>
+          <form className="grid gap-4 md:grid-cols-2" onSubmit={handleModifyDue}>
+            <div>
+              <label className="label">CDB ID</label>
+              <input className="field bg-slate-50" value={modifyDueModal.cdbId} readOnly disabled />
+            </div>
+            <div>
+              <label className="label">Customer Name</label>
+              <input className="field bg-slate-50" value={modifyDueModal.customerName} readOnly disabled />
+            </div>
+            <div>
+              <label className="label">Current Due</label>
+              <input className="field bg-slate-50" value={formatCurrency(modifyDueModal.currentDue)} readOnly disabled />
+            </div>
+            <div>
+              <label className="label">New Due Amount *</label>
+              <input
+                className="field"
+                type="number"
+                min="0"
+                step="0.01"
+                value={newDueAmount}
+                onChange={(e) => setNewDueAmount(e.target.value)}
+                required
+              />
+            </div>
+
+            <div className="md:col-span-2 flex flex-col-reverse gap-3 pt-2 sm:flex-row sm:justify-end">
+              <button
+                type="button"
+                className="button-secondary w-full sm:w-auto"
+                onClick={closeModifyDueModal}
+              >
+                Cancel
+              </button>
+              <button type="submit" className="button-primary w-full sm:w-auto" disabled={modifyingDue}>
+                {modifyingDue ? "Saving..." : "Save Changes"}
+              </button>
+            </div>
+          </form>
         </RecordModal>
       ) : null}
     </div>
