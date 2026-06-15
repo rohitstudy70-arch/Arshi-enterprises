@@ -193,7 +193,7 @@ incomeSchema.pre("validate", function setDerivedFields(next) {
   const now = new Date();
   const todayEnd = new Date(now);
   todayEnd.setHours(23, 59, 59, 999);
-  const minDate = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+  const minDate = new Date(now.getFullYear(), now.getMonth() - 6, 1);
   minDate.setHours(0, 0, 0, 0);
 
   this.dues = billAmount - receivedAmount;
@@ -213,7 +213,7 @@ incomeSchema.pre("validate", function setDerivedFields(next) {
   } else if (transactionDate > todayEnd) {
     this.invalidate("transaction_date", "Transaction date cannot be in the future");
   } else if (transactionDate < minDate && this.isNew) {
-    this.invalidate("transaction_date", "Transaction date can only be backdated to the previous month");
+    this.invalidate("transaction_date", "Transaction date can only be backdated to up to 6 months ago");
   }
 
   if (serviceType === "CCTV Installation") {

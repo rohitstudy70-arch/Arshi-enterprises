@@ -14,7 +14,7 @@ const todayInputValue = () => toDateInputValue(new Date());
 
 const minBackdateValue = () => {
   const date = new Date();
-  date.setMonth(date.getMonth() - 1, 1);
+  date.setMonth(date.getMonth() - 6, 1);
   return toDateInputValue(date);
 };
 
@@ -216,7 +216,7 @@ const ExecutivePanelPage = () => {
     const minDate = new Date(`${minBackdateValue()}T00:00:00`);
     const maxDate = new Date(`${todayInputValue()}T23:59:59`);
     if (selectedDate < minDate || selectedDate > maxDate) {
-      return "Date must be in the current month or previous month. Future dates are not allowed.";
+      return "Date must be in the last 6 months. Future dates are not allowed.";
     }
 
     if (form.paymentMode === "split") {
@@ -508,11 +508,6 @@ const ExecutivePanelPage = () => {
               <h3 className="mt-2 text-2xl font-bold text-ink">Add income record</h3>
             </div>
 
-            {incomeFeedback ? (
-              <div className={`mt-6 rounded-2xl border px-4 py-3 text-sm ${feedbackStyles[incomeFeedback.type]}`}>
-                {incomeFeedback.message}
-              </div>
-            ) : null}
 
             <div className="mt-6 grid gap-4 md:grid-cols-2">
               <div>
@@ -755,6 +750,12 @@ const ExecutivePanelPage = () => {
                 />
               </div>
             </div>
+
+            {incomeFeedback ? (
+              <div className={`mt-6 rounded-2xl border px-4 py-3 text-sm ${feedbackStyles[incomeFeedback.type]}`}>
+                {incomeFeedback.message}
+              </div>
+            ) : null}
 
               <div className="flex justify-end mt-6">
                 <button type="submit" className="button-primary" disabled={submittingIncome}>
