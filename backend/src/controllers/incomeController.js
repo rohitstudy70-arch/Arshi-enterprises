@@ -64,21 +64,21 @@ const addIncome = async (req, res) => {
     }
 
     // ===== DUPLICATE CUSTOMER CHECK =====
-    // Prevent re-entry of existing customers by checking mobile1 and vehicleChassisNo
+    // Prevent re-entry of existing customers by checking imeiNo and vtsNo
     const duplicateConditions = [];
-    if (mobile1 && String(mobile1).trim()) {
-      duplicateConditions.push({ mobile1: String(mobile1).trim() });
+    if (imeiNo && String(imeiNo).trim()) {
+      duplicateConditions.push({ imeiNo: String(imeiNo).trim() });
     }
-    if (vehicleChassisNo && String(vehicleChassisNo).trim()) {
-      duplicateConditions.push({ vehicleChassisNo: String(vehicleChassisNo).trim() });
+    if (vtsNo && String(vtsNo).trim()) {
+      duplicateConditions.push({ vtsNo: String(vtsNo).trim() });
     }
 
     if (duplicateConditions.length > 0) {
       const existingRecord = await Income.findOne({ $or: duplicateConditions }).lean();
       if (existingRecord) {
-        const matchedField = existingRecord.mobile1 === String(mobile1).trim()
-          ? `Mobile No (${mobile1})`
-          : `Vehicle/Chassis No (${vehicleChassisNo})`;
+        const matchedField = (imeiNo && existingRecord.imeiNo === String(imeiNo).trim())
+          ? `IMEI No (${imeiNo})`
+          : `VTS No (${vtsNo})`;
         return res.status(400).json({
           message: `Existing customer found! ${matchedField} already exists for "${existingRecord.clientName}" (CDB No: ${existingRecord.cbNumber || "N/A"}). Duplicate entry is not allowed.`
         });
