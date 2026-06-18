@@ -64,7 +64,7 @@ const addIncome = async (req, res) => {
     }
 
     // ===== DUPLICATE CUSTOMER CHECK =====
-    // Prevent re-entry of existing customers by checking imeiNo and vtsNo
+    // Prevent re-entry of existing customers by checking imeiNo, vtsNo, and vehicleChassisNo
     const duplicateConditions = [];
     if (imeiNo && String(imeiNo).trim()) {
       duplicateConditions.push({ imeiNo: String(imeiNo).trim() });
@@ -72,13 +72,21 @@ const addIncome = async (req, res) => {
     if (vtsNo && String(vtsNo).trim()) {
       duplicateConditions.push({ vtsNo: String(vtsNo).trim() });
     }
+    if (vehicleChassisNo && String(vehicleChassisNo).trim()) {
+      duplicateConditions.push({ vehicleChassisNo: String(vehicleChassisNo).trim() });
+    }
 
     if (duplicateConditions.length > 0) {
       const existingRecord = await Income.findOne({ $or: duplicateConditions }).lean();
       if (existingRecord) {
-        const matchedField = (imeiNo && existingRecord.imeiNo === String(imeiNo).trim())
-          ? `IMEI No (${imeiNo})`
-          : `VTS No (${vtsNo})`;
+        let matchedField = "";
+        if (imeiNo && existingRecord.imeiNo === String(imeiNo).trim()) {
+          matchedField = `IMEI No (${imeiNo})`;
+        } else if (vtsNo && existingRecord.vtsNo === String(vtsNo).trim()) {
+          matchedField = `VTS No (${vtsNo})`;
+        } else {
+          matchedField = `Vehicle/Chassis No (${vehicleChassisNo})`;
+        }
         return res.status(400).json({
           message: `Existing customer found! ${matchedField} already exists for "${existingRecord.clientName}" (CDB No: ${existingRecord.cbNumber || "N/A"}). Duplicate entry is not allowed.`
         });
